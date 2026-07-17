@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import AIGrade, Attempt, GradeDecision, Question, ReviewQueueItem, RubricVersion
+from .models import AccommodationRequest, AIGrade, Attempt, GradeDecision, Question, ReviewQueueItem, RubricVersion
 
 
 @admin.register(Question)
@@ -47,4 +47,12 @@ class ReviewQueueItemAdmin(admin.ModelAdmin):
     list_display = ("attempt", "status", "assigned_to", "reason", "created_at", "resolved_at")
     list_filter = ("status",)
     search_fields = ("attempt__enrollment__student__email", "assigned_to__email", "reason")
+    readonly_fields = ("id", "created_at")
+
+
+@admin.register(AccommodationRequest)
+class AccommodationRequestAdmin(admin.ModelAdmin):
+    list_display = ("student", "course", "accommodation_type", "status", "reviewed_by", "created_at")
+    list_filter = ("accommodation_type", "status")
+    search_fields = ("student__email", "course__title", "details")
     readonly_fields = ("id", "created_at")

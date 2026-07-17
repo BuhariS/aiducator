@@ -1,7 +1,8 @@
 from django import forms
 from django.utils.text import slugify
+from urllib.parse import urlparse
 
-from .models import Course, LessonVersion, Module
+from .models import Course, LessonArtifact, LessonVersion, Module
 
 
 class CourseForm(forms.ModelForm):
@@ -36,6 +37,44 @@ class ModuleForm(forms.ModelForm):
             "title": forms.TextInput(attrs={"placeholder": "Module title"}),
             "position": forms.NumberInput(attrs={"min": 1}),
         }
+
+
+class ArtifactForm(forms.ModelForm):
+    class Meta:
+        model = LessonArtifact
+        fields = ("artifact_type", "content", "asset", "position", "is_active")
+        widgets = {
+            "content": forms.Textarea(
+                attrs={"rows": 6, "placeholder": "Add text, a URL, or embed reference..."}
+            ),
+            "asset": forms.ClearableFileInput(attrs={"accept": "image/*,video/*"}),
+            "position": forms.NumberInput(attrs={"min": 0}),
+        }
+
+    def clean(self):
+        cleaned_data = super().clean()
+        artifact_type = cleaned_data.get("artifact_type")
+        content = cleaned_data.get("content", "").strip()
+        asset = cleaned_data.get("asset")
+        if artifact_type == LessonArtifact.ArtifactType.IMAGE and not content and not asset:
+            raise forms.ValidationError("Add an image URL or upload an image file.")
+        if artifact_type == LessonArtifact.ArtifactType.VIDEO and not content and not asset:
+            self.add_error("content", "Add a video URL or upload a video file.")
+        if artifact_type == LessonArtifact.ArtifactType.SIMULATION and not content:
+            self.add_error("content", "Add a simulation URL.")
+        if artifact_type == LessonArtifact.ArtifactType.TEXT and not content:
+            self.add_error("content", "Add text content.")
+        if content and artifact_type in {
+            LessonArtifact.ArtifactType.IMAGE,
+            LessonArtifact.ArtifactType.VIDEO,
+            LessonArtifact.ArtifactType.SIMULATION,
+        } and urlparse(content).scheme not in {"http", "https"}:
+            self.add_error("content", "Resource links must use http:// or https://.")
+        return cleaned_data
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["content"].required = False
 
 
 class LessonForm(forms.ModelForm):

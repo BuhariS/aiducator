@@ -31,7 +31,7 @@ npm install
 npm run build
 ```
 
-Use `npm run dev` during UI development. The implementation plan, schema, user journeys, screen inventory, and acceptance criteria are in `docs/phase-1-specification.md`.
+Use `npm run dev` during UI development. The implementation plan, schema, user journeys, screen inventory, and acceptance criteria are in `docs/phase-1-specification.md`. Phase 3 workflow details are in `docs/phase-3-implementation.md`.
 
 ## AI grading worker
 

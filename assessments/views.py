@@ -5,6 +5,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods
+from django.views.decorators.http import require_POST
 from django.utils import timezone
 
 from ai_engine.models import AIJob
@@ -13,11 +14,13 @@ from accounts.access import user_has_teacher_access, user_is_teacher
 from analytics.models import LearningEvent
 from gamification.models import XPEvent
 from enrollments.models import Enrollment, LessonProgress
+from enrollments.services import refresh_course_completion
 from notifications.models import Notification
 from organizations.models import Membership
 
-from .forms import AttemptForm, GradeDecisionForm
-from .models import Attempt, GradeDecision, Question, ReviewQueueItem
+from .access import has_copy_paste_accommodation
+from .forms import AccommodationRequestForm, AttemptForm, GradeDecisionForm
+from .models import AccommodationRequest, Attempt, GradeDecision, Question, ReviewQueueItem
 
 
 @login_required
@@ -34,7 +37,11 @@ def submit_attempt(request, question_id):
     if attempts_used >= 3:
         return render(request, "assessments/attempt_locked.html", {"question": question}, status=400)
 
-    form = AttemptForm(request.POST or None)
+    allow_copy_paste = has_copy_paste_accommodation(
+        request.user,
+        question.lesson_version.module.course_version.course,
+    )
+    form = AttemptForm(request.POST or None, allow_copy_paste=allow_copy_paste)
     if request.method == "POST" and form.is_valid():
         with transaction.atomic():
             attempt = form.save(commit=False)
@@ -55,8 +62,72 @@ def submit_attempt(request, question_id):
     return render(
         request,
         "assessments/submit.html",
-        {"question": question, "form": form, "attempt_number": attempts_used + 1},
+        {
+            "question": question,
+            "form": form,
+            "attempt_number": attempts_used + 1,
+            "allow_copy_paste": allow_copy_paste,
+        },
     )
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def request_accommodation(request):
+    form = AccommodationRequestForm(request.POST or None, student=request.user)
+    if request.method == "POST" and form.is_valid():
+        accommodation = form.save(commit=False)
+        accommodation.student = request.user
+        accommodation.save()
+        return redirect("assessments:accommodation-requested")
+    return render(request, "assessments/accommodation_form.html", {"form": form})
+
+
+@login_required
+def accommodation_requested(request):
+    return render(request, "assessments/accommodation_requested.html")
+
+
+@login_required
+def accommodation_queue(request):
+    if not user_is_teacher(request.user):
+        from django.http import HttpResponseForbidden
+
+        return HttpResponseForbidden("You do not have access to accommodation requests.")
+    items = AccommodationRequest.objects.filter(status=AccommodationRequest.Status.PENDING).filter(
+        Q(course__created_by=request.user)
+        | Q(
+            course__organization__memberships__user=request.user,
+            course__organization__memberships__role__in={
+                Membership.Role.OWNER,
+                Membership.Role.ADMIN,
+                Membership.Role.TEACHER,
+            },
+        )
+    ).select_related("student", "course").distinct()
+    return render(request, "assessments/accommodation_queue.html", {"requests": items})
+
+
+@login_required
+@require_POST
+def decide_accommodation(request, request_id):
+    accommodation = get_object_or_404(
+        AccommodationRequest.objects.select_related("course", "student"),
+        id=request_id,
+        status=AccommodationRequest.Status.PENDING,
+    )
+    if not user_has_teacher_access(request.user, accommodation.course.organization):
+        from django.http import HttpResponseForbidden
+
+        return HttpResponseForbidden("You do not have access to this accommodation request.")
+    decision = request.POST.get("decision")
+    if decision not in {AccommodationRequest.Status.APPROVED, AccommodationRequest.Status.DECLINED}:
+        return redirect("assessments:accommodation-queue")
+    accommodation.status = decision
+    accommodation.reviewed_by = request.user
+    accommodation.reviewed_at = timezone.now()
+    accommodation.save(update_fields=["status", "reviewed_by", "reviewed_at"])
+    return redirect("assessments:accommodation-queue")
 
 
 @login_required
@@ -177,6 +248,7 @@ def finalize_review(item, teacher, final_score, reason=""):
     else:
         progress.status = LessonProgress.Status.IN_PROGRESS
     progress.save(update_fields=["best_score", "attempts_used", "status", "completed_at"])
+    refresh_course_completion(attempt.enrollment, actor=teacher)
 
     GradeDecision.objects.update_or_create(
         attempt=attempt,

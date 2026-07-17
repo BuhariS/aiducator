@@ -1,4 +1,5 @@
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import ValidationError
 from django.http import Http404, HttpResponseForbidden
 from django.contrib import messages
 from django.db import transaction
@@ -8,12 +9,13 @@ from django.views.decorators.http import require_http_methods, require_POST
 
 from accounts.access import user_has_teacher_access, user_is_student, user_is_teacher
 from assessments.forms import QuestionForm, RubricForm
-from assessments.models import Question, ReviewQueueItem, RubricVersion
+from assessments.models import Attempt, Question, ReviewQueueItem, RubricVersion
 from enrollments.models import Enrollment, LessonProgress
+from enrollments.services import mark_lesson_complete
 from organizations.models import Membership
 
-from .forms import CourseForm, LessonForm, ModuleForm
-from .models import Course, CourseVersion, LessonVersion, Module
+from .forms import ArtifactForm, CourseForm, LessonForm, ModuleForm
+from .models import Course, CourseVersion, LessonArtifact, LessonVersion, Module
 from .services import create_draft_version
 
 
@@ -46,7 +48,7 @@ def enroll(request, slug):
 
 
 @login_required
-def learn(request, slug):
+def learn(request, slug, lesson_id=None):
     course = get_object_or_404(Course, slug=slug, status=Course.Status.PUBLISHED)
     enrollment = get_object_or_404(
         Enrollment.objects.select_related("course_version"),
@@ -55,9 +57,26 @@ def learn(request, slug):
         status=Enrollment.Status.ACTIVE,
     )
     version = enrollment.course_version
-    modules = version.modules.prefetch_related("lessons__questions").all()
-    first_lesson = LessonVersion.objects.filter(module__course_version=version).select_related("module").first()
+    modules = list(version.modules.prefetch_related("lessons__questions", "lessons__artifacts").all())
+    lessons = [lesson for module in modules for lesson in module.lessons.all()]
+    if lesson_id:
+        selected_lesson = get_object_or_404(
+            LessonVersion,
+            id=lesson_id,
+            module__course_version=version,
+        )
+    else:
+        selected_lesson = lessons[0] if lessons else None
     progress = LessonProgress.objects.filter(enrollment=enrollment)
+    attempts = Attempt.objects.filter(enrollment=enrollment, question__lesson_version__in=lessons).select_related(
+        "grade_decision"
+    )
+    progress_by_lesson = {item.lesson_version_id: item for item in progress}
+    attempts_by_question = {attempt.question_id: attempt for attempt in attempts}
+    for lesson in lessons:
+        lesson.student_progress = progress_by_lesson.get(lesson.id)
+        for question in lesson.questions.all():
+            question.student_attempt = attempts_by_question.get(question.id)
     return render(
         request,
         "courses/learn.html",
@@ -65,10 +84,32 @@ def learn(request, slug):
             "course": course,
             "enrollment": enrollment,
             "modules": modules,
-            "first_lesson": first_lesson,
-            "progress_by_lesson": {item.lesson_version_id: item for item in progress},
+            "first_lesson": selected_lesson,
+            "selected_lesson": selected_lesson,
+            "progress_by_lesson": progress_by_lesson,
+            "attempts_by_question": attempts_by_question,
         },
     )
+
+
+@login_required
+@require_POST
+def mark_lesson_complete_view(request, slug, lesson_id):
+    course = get_object_or_404(Course, slug=slug, status=Course.Status.PUBLISHED)
+    enrollment = get_object_or_404(
+        Enrollment.objects.select_related("course_version", "course"),
+        course=course,
+        student=request.user,
+        status=Enrollment.Status.ACTIVE,
+    )
+    lesson = get_object_or_404(LessonVersion, id=lesson_id, module__course_version=enrollment.course_version)
+    try:
+        mark_lesson_complete(enrollment, lesson, actor=request.user)
+    except ValidationError as error:
+        messages.error(request, error.message)
+    else:
+        messages.success(request, "Lesson completed. Continue to the next lesson.")
+    return redirect("courses:learn-lesson", slug=course.slug, lesson_id=lesson.id)
 
 
 @login_required
@@ -136,6 +177,37 @@ def course_studio(request, slug):
 
 
 @login_required
+def preview_version(request, slug, version_id, lesson_id=None):
+    course = get_object_or_404(Course, slug=slug)
+    version = get_object_or_404(
+        CourseVersion.objects.prefetch_related("modules__lessons__artifacts", "modules__lessons__questions"),
+        id=version_id,
+        course=course,
+    )
+    if not user_has_teacher_access(request.user, course.organization):
+        return HttpResponseForbidden("You do not have access to preview this course.")
+    modules = list(version.modules.all())
+    lessons = [lesson for module in modules for lesson in module.lessons.all()]
+    selected_lesson = lessons[0] if lessons else None
+    if lesson_id:
+        selected_lesson = get_object_or_404(
+            LessonVersion,
+            id=lesson_id,
+            module__course_version=version,
+        )
+    return render(
+        request,
+        "courses/preview.html",
+        {
+            "course": course,
+            "version": version,
+            "modules": modules,
+            "selected_lesson": selected_lesson,
+        },
+    )
+
+
+@login_required
 @require_POST
 def create_course_version(request, slug):
     course = get_object_or_404(Course, slug=slug)
@@ -183,6 +255,33 @@ def add_module(request, slug, version_id):
         messages.success(request, "Module added to the draft version.")
         return redirect("teacher_courses:version-editor", slug=course.slug, version_id=version.id)
     return render(request, "courses/module_form.html", {"course": course, "version": version, "form": form})
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def artifact_form(request, slug, version_id, lesson_id, artifact_id=None):
+    course, version, error = _get_editable_version(request, slug, version_id)
+    if error:
+        return error
+    lesson = get_object_or_404(LessonVersion, id=lesson_id, module__course_version=version)
+    artifact = get_object_or_404(LessonArtifact, id=artifact_id, lesson_version=lesson) if artifact_id else None
+    form = ArtifactForm(
+        request.POST or None,
+        request.FILES or None,
+        instance=artifact,
+        initial={"position": lesson.artifacts.count()} if artifact is None else None,
+    )
+    if request.method == "POST" and form.is_valid():
+        saved_artifact = form.save(commit=False)
+        saved_artifact.lesson_version = lesson
+        saved_artifact.save()
+        messages.success(request, "Learning material saved to the draft version.")
+        return redirect("teacher_courses:version-editor", slug=course.slug, version_id=version.id)
+    return render(
+        request,
+        "courses/artifact_form.html",
+        {"course": course, "version": version, "lesson": lesson, "artifact": artifact, "form": form},
+    )
 
 
 @login_required

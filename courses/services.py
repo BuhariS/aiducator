@@ -53,6 +53,7 @@ def create_draft_version(
                     lesson_version=lesson,
                     artifact_type=source_artifact.artifact_type,
                     content=source_artifact.content,
+                    asset=source_artifact.asset.name if source_artifact.asset else "",
                     metadata=deepcopy(source_artifact.metadata),
                     is_active=source_artifact.is_active,
                     position=source_artifact.position,

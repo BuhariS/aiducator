@@ -6,6 +6,7 @@ from .views import (
     course_detail,
     enroll,
     learn,
+    mark_lesson_complete_view,
 )
 
 app_name = "courses"
@@ -15,6 +16,8 @@ urlpatterns = [
     path("<slug:slug>/", course_detail, name="detail"),
     path("<slug:slug>/enroll/", enroll, name="enroll"),
     path("<slug:slug>/learn/", learn, name="learn"),
+    path("<slug:slug>/learn/<uuid:lesson_id>/", learn, name="learn-lesson"),
+    path("<slug:slug>/learn/<uuid:lesson_id>/complete/", mark_lesson_complete_view, name="complete-lesson"),
     path("dashboard/student/", RedirectView.as_view(pattern_name="dashboard:student-dashboard"), name="student-dashboard"),
     path("dashboard/teacher/", RedirectView.as_view(pattern_name="dashboard:teacher-dashboard"), name="teacher-dashboard"),
     path("<slug:slug>/studio/", RedirectView.as_view(pattern_name="teacher_courses:studio"), name="studio"),

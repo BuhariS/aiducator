@@ -46,6 +46,13 @@ class LessonProgress(models.Model):
         constraints = [models.UniqueConstraint(fields=["enrollment", "lesson_version"], name="unique_lesson_progress")]
 
 
+class StudentProgress(LessonProgress):
+    class Meta:
+        proxy = True
+        verbose_name = "Student progress"
+        verbose_name_plural = "Student progress"
+
+
 class CourseCompletion(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     enrollment = models.OneToOneField(Enrollment, on_delete=models.CASCADE, related_name="completion")

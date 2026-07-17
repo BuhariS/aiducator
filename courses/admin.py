@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Course, CourseVersion, LessonArtifact, LessonVersion, Module, Translation
+from .models import Course, CourseVersion, Lesson, LessonArtifact, LessonVersion, Module, Translation
 
 
 @admin.register(Course)
@@ -33,6 +33,11 @@ class LessonVersionAdmin(admin.ModelAdmin):
     list_filter = ("status",)
     search_fields = ("title", "module__title", "module__course_version__course__title")
     readonly_fields = ("id", "created_at")
+
+
+@admin.register(Lesson)
+class LessonAdmin(LessonVersionAdmin):
+    pass
 
 
 @admin.register(LessonArtifact)

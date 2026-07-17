@@ -118,6 +118,13 @@ class LessonVersion(models.Model):
         return super().delete(*args, **kwargs)
 
 
+class Lesson(LessonVersion):
+    class Meta:
+        proxy = True
+        verbose_name = "Lesson"
+        verbose_name_plural = "Lessons"
+
+
 class LessonArtifact(models.Model):
     class ArtifactType(models.TextChoices):
         TEXT = "text", "Text"
@@ -130,6 +137,7 @@ class LessonArtifact(models.Model):
     lesson_version = models.ForeignKey(LessonVersion, on_delete=models.CASCADE, related_name="artifacts")
     artifact_type = models.CharField(max_length=30, choices=ArtifactType.choices)
     content = models.TextField()
+    asset = models.FileField(upload_to="lesson-artifacts/", blank=True)
     metadata = models.JSONField(default=dict, blank=True)
     is_active = models.BooleanField(default=True)
     position = models.PositiveIntegerField(default=0)

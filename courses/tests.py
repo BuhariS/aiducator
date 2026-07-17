@@ -1,11 +1,13 @@
 from django.core.exceptions import ValidationError
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.urls import reverse
 
 from accounts.models import User
+from enrollments.models import Enrollment
 from organizations.models import Membership, Organization
 
-from .models import Course, CourseVersion, LessonVersion, Module
+from .models import Course, CourseVersion, LessonArtifact, LessonVersion, Module
 
 
 class CourseFlowTests(TestCase):
@@ -158,3 +160,76 @@ class CourseAuthoringTests(TestCase):
         module.title = "Changed after publish"
         with self.assertRaises(ValidationError):
             module.save()
+
+    def test_teacher_can_add_material_and_preview_student_experience(self):
+        version = CourseVersion.objects.create(course=self.course, version_number=1, status=CourseVersion.Status.DRAFT)
+        module = Module.objects.create(course_version=version, title="Getting started", position=1)
+        lesson = LessonVersion.objects.create(
+            module=module,
+            title="Welcome",
+            objectives=["Navigate the course"],
+            content="Welcome to the course.",
+            position=1,
+        )
+        response = self.client.post(
+            reverse(
+                "teacher_courses:create-artifact",
+                kwargs={"slug": self.course.slug, "version_id": version.id, "lesson_id": lesson.id},
+            ),
+            {
+                "artifact_type": "image",
+                "content": "",
+                "position": 0,
+                "is_active": "on",
+                "asset": SimpleUploadedFile("welcome.png", b"fake-image", content_type="image/png"),
+            },
+        )
+        self.assertRedirects(
+            response,
+            reverse("teacher_courses:version-editor", kwargs={"slug": self.course.slug, "version_id": version.id}),
+        )
+        self.assertTrue(LessonArtifact.objects.filter(lesson_version=lesson, artifact_type="image").exists())
+        response = self.client.get(
+            reverse("teacher_courses:preview-version", kwargs={"slug": self.course.slug, "version_id": version.id})
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Welcome")
+
+
+class StudentProgressionTests(TestCase):
+    def setUp(self):
+        self.student = User.objects.create_user(email="progress@example.com", password="StrongPass123!")
+        organization = Organization.objects.create(name="Progress School", slug="progress-school")
+        Membership.objects.create(organization=organization, user=self.student, role=Membership.Role.STUDENT)
+        teacher = User.objects.create_user(email="progress-teacher@example.com", password="StrongPass123!")
+        course = Course.objects.create(
+            organization=organization,
+            created_by=teacher,
+            title="Progress Python",
+            slug="progress-python",
+            status=Course.Status.PUBLISHED,
+        )
+        Membership.objects.create(organization=organization, user=teacher, role=Membership.Role.TEACHER)
+        version = CourseVersion.objects.create(course=course, version_number=1, status=CourseVersion.Status.DRAFT)
+        module = Module.objects.create(course_version=version, title="First module", position=1)
+        lesson = LessonVersion.objects.create(module=module, title="First lesson", content="Read this.", position=1)
+        version.status = CourseVersion.Status.PUBLISHED
+        version.save(update_fields=["status"])
+        self.course = course
+        self.lesson = lesson
+        self.enrollment = Enrollment.objects.create(
+            course=course,
+            course_version=version,
+            student=self.student,
+        )
+
+    def test_student_can_complete_content_only_lesson(self):
+        self.client.force_login(self.student)
+        response = self.client.post(
+            reverse("courses:complete-lesson", kwargs={"slug": self.course.slug, "lesson_id": self.lesson.id})
+        )
+        self.assertRedirects(
+            response,
+            reverse("courses:learn-lesson", kwargs={"slug": self.course.slug, "lesson_id": self.lesson.id}),
+        )
+        self.assertEqual(self.enrollment.lesson_progress.get().status, "completed")

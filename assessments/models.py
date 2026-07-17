@@ -5,6 +5,7 @@ from django.core.exceptions import ValidationError
 from django.db import models
 
 from courses.models import LessonVersion
+from courses.models import Course
 from enrollments.models import Enrollment
 
 
@@ -137,3 +138,26 @@ class ReviewQueueItem(models.Model):
     assigned_to = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="assigned_reviews")
     created_at = models.DateTimeField(auto_now_add=True)
     resolved_at = models.DateTimeField(null=True, blank=True)
+
+
+class AccommodationRequest(models.Model):
+    class AccommodationType(models.TextChoices):
+        COPY_PASTE = "copy_paste", "Copy and paste assistance"
+        EXTENDED_TIME = "extended_time", "Extended assessment time"
+        SCREEN_READER = "screen_reader", "Screen reader support"
+        OTHER = "other", "Other accommodation"
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        APPROVED = "approved", "Approved"
+        DECLINED = "declined", "Declined"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    student = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="accommodation_requests")
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name="accommodation_requests")
+    accommodation_type = models.CharField(max_length=30, choices=AccommodationType.choices)
+    details = models.TextField()
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    reviewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="reviewed_accommodations")
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)

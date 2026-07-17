@@ -1,9 +1,16 @@
 from django import forms
 
-from .models import Attempt, Question
+from .models import AccommodationRequest, Attempt, Question
 
 
 class AttemptForm(forms.ModelForm):
+    def __init__(self, *args, allow_copy_paste=False, **kwargs):
+        super().__init__(*args, **kwargs)
+        if allow_copy_paste:
+            for attribute in ("onpaste", "oncopy", "oncut", "ondrop", "oncontextmenu", "data-protected-input"):
+                self.fields["answer_text"].widget.attrs.pop(attribute, None)
+            self.fields["answer_text"].widget.attrs["aria-describedby"] = "accessibility-accommodation"
+
     class Meta:
         model = Attempt
         fields = ("answer_text",)
@@ -61,3 +68,21 @@ class RubricForm(forms.Form):
         if not criteria:
             raise forms.ValidationError("Add at least one rubric criterion.")
         return criteria
+
+
+class AccommodationRequestForm(forms.ModelForm):
+    class Meta:
+        model = AccommodationRequest
+        fields = ("course", "accommodation_type", "details")
+        widgets = {"details": forms.Textarea(attrs={"rows": 6, "placeholder": "Tell your teacher what support would help..."})}
+
+    def __init__(self, *args, student=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["course"].queryset = (
+            self.fields["course"].queryset.filter(
+                enrollments__student=student,
+                enrollments__status="active",
+            ).distinct()
+            if student
+            else self.fields["course"].queryset.none()
+        )

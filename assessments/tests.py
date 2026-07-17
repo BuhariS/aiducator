@@ -9,7 +9,7 @@ from courses.models import Course, CourseVersion, LessonVersion, Module
 from enrollments.models import Enrollment
 from organizations.models import Membership, Organization
 
-from .models import Attempt, GradeDecision, Question, ReviewQueueItem, RubricVersion
+from .models import AccommodationRequest, Attempt, GradeDecision, Question, ReviewQueueItem, RubricVersion
 from .views import finalize_review
 
 
@@ -88,6 +88,29 @@ class AttemptFlowTests(TestCase):
         )
         self.assertEqual(response.status_code, 400)
         self.assertEqual(Attempt.objects.count(), 3)
+
+    def test_student_can_request_and_teacher_can_approve_copy_paste_support(self):
+        self.client.force_login(self.student)
+        response = self.client.post(
+            reverse("assessments:request-accommodation"),
+            {
+                "course": self.enrollment.course_id,
+                "accommodation_type": AccommodationRequest.AccommodationType.COPY_PASTE,
+                "details": "I need assistive input support for controlled assessments.",
+            },
+        )
+        self.assertRedirects(response, reverse("assessments:accommodation-requested"))
+        request = AccommodationRequest.objects.get()
+        self.client.force_login(self.teacher)
+        response = self.client.post(
+            reverse("assessments:decide-accommodation", kwargs={"request_id": request.id}),
+            {"decision": AccommodationRequest.Status.APPROVED},
+        )
+        self.assertRedirects(response, reverse("assessments:accommodation-queue"))
+        self.client.force_login(self.student)
+        response = self.client.get(reverse("assessments:submit", kwargs={"question_id": self.question.id}))
+        self.assertContains(response, "approved accessibility accommodation is active")
+        self.assertNotContains(response, 'data-protected-input="true"')
 
     def test_review_service_rejects_teacher_from_another_organization(self):
         outsider = User.objects.create_user(email="outsider@example.com", password="StrongPass123!")

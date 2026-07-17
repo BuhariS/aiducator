@@ -2,12 +2,14 @@ from django.urls import path
 
 from courses.views import (
     add_module,
+    artifact_form,
     course_studio,
     create_course,
     create_course_version,
     lesson_form,
     publish_version,
     question_form,
+    preview_version,
     version_editor,
 )
 
@@ -18,6 +20,12 @@ urlpatterns = [
     path("<slug:slug>/studio/", course_studio, name="studio"),
     path("<slug:slug>/studio/versions/new/", create_course_version, name="create-version"),
     path("<slug:slug>/studio/versions/<uuid:version_id>/", version_editor, name="version-editor"),
+    path("<slug:slug>/studio/versions/<uuid:version_id>/preview/", preview_version, name="preview-version"),
+    path(
+        "<slug:slug>/studio/versions/<uuid:version_id>/preview/<uuid:lesson_id>/",
+        preview_version,
+        name="preview-lesson",
+    ),
     path("<slug:slug>/studio/versions/<uuid:version_id>/modules/add/", add_module, name="add-module"),
     path(
         "<slug:slug>/studio/versions/<uuid:version_id>/modules/<uuid:module_id>/lessons/new/",
@@ -28,6 +36,16 @@ urlpatterns = [
         "<slug:slug>/studio/versions/<uuid:version_id>/modules/<uuid:module_id>/lessons/<uuid:lesson_id>/edit/",
         lesson_form,
         name="edit-lesson",
+    ),
+    path(
+        "<slug:slug>/studio/versions/<uuid:version_id>/lessons/<uuid:lesson_id>/artifacts/new/",
+        artifact_form,
+        name="create-artifact",
+    ),
+    path(
+        "<slug:slug>/studio/versions/<uuid:version_id>/lessons/<uuid:lesson_id>/artifacts/<uuid:artifact_id>/edit/",
+        artifact_form,
+        name="edit-artifact",
     ),
     path(
         "<slug:slug>/studio/versions/<uuid:version_id>/lessons/<uuid:lesson_id>/questions/new/",

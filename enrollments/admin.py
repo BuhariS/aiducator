@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import CourseCompletion, Enrollment, LessonProgress
+from .models import CourseCompletion, Enrollment, LessonProgress, StudentProgress
 
 
 @admin.register(Enrollment)
@@ -17,6 +17,11 @@ class LessonProgressAdmin(admin.ModelAdmin):
     list_filter = ("status",)
     search_fields = ("enrollment__student__email", "lesson_version__title")
     readonly_fields = ("id",)
+
+
+@admin.register(StudentProgress)
+class StudentProgressAdmin(LessonProgressAdmin):
+    pass
 
 
 @admin.register(CourseCompletion)
