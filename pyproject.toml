@@ -1,0 +1,35 @@
+[project]
+name = "aiducator"
+version = "0.1.0"
+description = "AI-assisted Python learning for Nigerian secondary schools"
+requires-python = ">=3.12"
+dependencies = [
+    "celery>=5.4,<6.0",
+    "Django>=5.2,<6.0",
+    "dj-database-url>=2.2,<3.0",
+    "django-environ>=0.11,<1.0",
+    "django-htmx>=1.21,<2.0",
+    "openai>=1.100,<2.0",
+    "psycopg[binary]>=3.2,<4.0",
+    "pydantic>=2.9,<3.0",
+    "redis>=5.0,<6.0",
+]
+
+[dependency-groups]
+dev = [
+    "mypy>=1.13,<2.0",
+    "pytest>=8.3,<9.0",
+    "pytest-django>=4.9,<5.0",
+    "ruff>=0.8,<1.0",
+]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings"
+python_files = ["tests.py", "test_*.py", "*_tests.py"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

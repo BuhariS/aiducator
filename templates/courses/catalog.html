@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Course catalog · AIDUCATOR{% endblock %}
+{% block content %}
+<section class="bg-ink">
+  <div class="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+    <div class="max-w-2xl">
+      <p class="text-sm font-bold uppercase tracking-[0.25em] text-sunshine">Course catalog</p>
+      <h1 class="mt-4 text-4xl font-black leading-tight text-white sm:text-5xl">Learn the skills that help you build.</h1>
+      <p class="mt-5 text-lg leading-8 text-slate-300">Teacher-guided courses designed for focused progress, practical confidence, and meaningful feedback.</p>
+    </div>
+  </div>
+</section>
+<section class="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+  <div class="mb-8 flex items-end justify-between"><div><p class="text-sm font-bold uppercase tracking-wider text-emerald">Explore learning</p><h2 class="mt-2 text-2xl font-black text-ink">Available courses</h2></div></div>
+  {% if courses %}
+    <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+      {% for course in courses %}
+        <a href="{% url 'courses:detail' course.slug %}" class="surface-card group block overflow-hidden transition hover:-translate-y-1 hover:shadow-xl">
+          <div class="h-2 bg-gradient-to-r from-emerald to-sunshine"></div>
+          <div class="p-6"><div class="flex items-center justify-between"><span class="rounded-full bg-emerald/10 px-3 py-1 text-xs font-bold text-emerald">{{ course.duration_weeks }} weeks</span><span class="text-sm font-bold text-slate-400">{{ course.organization.name }}</span></div><h3 class="mt-6 text-xl font-black text-ink group-hover:text-emerald">{{ course.title }}</h3><p class="mt-3 line-clamp-3 text-sm leading-6 text-slate-500">{{ course.description }}</p><div class="mt-6 flex items-center justify-between border-t border-slate-100 pt-5 text-sm"><span class="font-bold text-slate-600">Passing score {{ course.passing_score }}%</span><span class="font-bold text-emerald">View course →</span></div></div>
+        </a>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="surface-card p-10 text-center"><p class="text-lg font-bold text-ink">Courses are being prepared.</p><p class="mt-2 text-slate-500">Check back soon for the first AIDUCATOR learning experience.</p></div>
+  {% endif %}
+</section>
+{% endblock %}

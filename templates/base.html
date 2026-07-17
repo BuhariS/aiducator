@@ -1,0 +1,58 @@
+{% load static %}
+<!doctype html>
+<html lang="en-NG">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="AIDUCATOR AI-assisted Python learning">
+    <link rel="stylesheet" href="{% static 'css/app.css' %}">
+    <title>{% block title %}AIDUCATOR{% endblock %}</title>
+  </head>
+  <body class="min-h-screen">
+    <header class="border-b border-slate-200 bg-white/90 backdrop-blur">
+      <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
+        <a href="{% if request.user.is_authenticated %}{% url 'accounts:dashboard' %}{% else %}{% url 'courses:catalog' %}{% endif %}" class="flex items-center gap-3">
+          <span class="grid h-10 w-10 place-items-center rounded-xl bg-ink text-lg font-black text-white">A</span>
+          <span class="text-lg font-black tracking-tight text-ink">AIDUCATOR</span>
+        </a>
+        <nav class="flex items-center gap-2 text-sm font-semibold">
+          <a class="hidden rounded-lg px-3 py-2 text-slate-600 transition hover:bg-slate-50 hover:text-ink sm:inline-block" href="{% url 'courses:catalog' %}">Courses</a>
+          {% if request.user.is_authenticated %}
+            <a class="rounded-lg px-3 py-2 text-slate-600 transition hover:bg-slate-50 hover:text-ink" href="{% url 'accounts:profile' %}">{{ request.user.first_name|default:request.user.email }}</a>
+            <form method="post" action="{% url 'accounts:logout' %}">
+              {% csrf_token %}
+              <button class="rounded-xl bg-ink px-3 py-2 text-white transition hover:bg-slate-700" type="submit">Log out</button>
+            </form>
+          {% else %}
+            <a class="rounded-lg px-3 py-2 text-slate-600 transition hover:bg-slate-50 hover:text-ink" href="{% url 'accounts:login' %}">Sign in</a>
+            <a class="primary-button" href="{% url 'accounts:signup' %}">Get started</a>
+          {% endif %}
+        </nav>
+      </div>
+    </header>
+
+    {% if messages %}
+      <div class="mx-auto max-w-7xl space-y-3 px-4 pt-6 sm:px-6 lg:px-8">
+        {% for message in messages %}
+          <div class="rounded-2xl border px-4 py-3 text-sm font-semibold {% if message.tags == 'error' %}border-red-200 bg-red-50 text-red-700{% else %}border-emerald-200 bg-emerald-50 text-emerald-800{% endif %}">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+    <main>{% block content %}{% endblock %}</main>
+
+    <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+    <script>
+      document.addEventListener("DOMContentLoaded", () => {
+        document.querySelectorAll("[data-protected-input]").forEach((field) => {
+          ["paste", "copy", "cut", "drop", "contextmenu"].forEach((eventName) => {
+            field.addEventListener(eventName, (event) => event.preventDefault());
+          });
+          field.addEventListener("input", () => {
+            const counter = document.querySelector(`[data-character-count="${field.id}"]`);
+            if (counter) counter.textContent = `${field.value.length} characters`;
+          });
+        });
+      });
+    </script>
+  </body>
+</html>

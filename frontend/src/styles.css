@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-cloud text-ink antialiased;
+  }
+}
+
+@layer components {
+  .surface-card {
+    @apply rounded-2xl bg-white shadow-card ring-1 ring-slate-100;
+  }
+
+  .primary-button {
+    @apply inline-flex items-center justify-center rounded-xl bg-emerald px-4 py-2.5 font-semibold text-white transition hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-emerald focus:ring-offset-2;
+  }
+}

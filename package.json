@@ -1,0 +1,11 @@
+{
+  "name": "aiducator-frontend",
+  "private": true,
+  "scripts": {
+    "build": "tailwindcss -i ./frontend/src/styles.css -o ./static/css/app.css --minify",
+    "dev": "tailwindcss -i ./frontend/src/styles.css -o ./static/css/app.css --watch"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.17"
+  }
+}

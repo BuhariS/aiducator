@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block title %}Add module · AIDUCATOR{% endblock %}
+{% block content %}
+<section class="mx-auto max-w-2xl px-4 py-12 sm:px-6 lg:px-8"><a class="text-sm font-bold text-emerald hover:underline" href="{% url 'teacher_courses:version-editor' course.slug version.id %}">← Draft editor</a><div class="mt-8"><p class="text-sm font-black uppercase tracking-wider text-emerald">Course structure</p><h1 class="mt-2 text-4xl font-black text-ink">Add a module</h1></div><form method="post" class="surface-card mt-8 space-y-6 p-6 sm:p-8">{% csrf_token %}{% for field in form %}<div><label class="mb-2 block text-sm font-bold text-slate-700" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.help_text %}<p class="mt-1 text-xs text-slate-500">{{ field.help_text }}</p>{% endif %}{% for error in field.errors %}<p class="mt-1 text-sm font-bold text-red-600">{{ error }}</p>{% endfor %}</div>{% endfor %}<button class="primary-button" type="submit">Save module</button></form></section>
+<style>input, textarea, select { width: 100%; border-radius: .75rem; border: 1px solid rgb(226 232 240); padding: .75rem 1rem; outline: none; } input:focus, textarea:focus, select:focus { border-color: rgb(15 118 110); box-shadow: 0 0 0 4px rgb(15 118 110 / .1); }</style>
+{% endblock %}

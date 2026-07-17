@@ -1,0 +1,43 @@
+from django.urls import path
+
+from courses.views import (
+    add_module,
+    course_studio,
+    create_course,
+    create_course_version,
+    lesson_form,
+    publish_version,
+    question_form,
+    version_editor,
+)
+
+app_name = "teacher_courses"
+
+urlpatterns = [
+    path("new/", create_course, name="create"),
+    path("<slug:slug>/studio/", course_studio, name="studio"),
+    path("<slug:slug>/studio/versions/new/", create_course_version, name="create-version"),
+    path("<slug:slug>/studio/versions/<uuid:version_id>/", version_editor, name="version-editor"),
+    path("<slug:slug>/studio/versions/<uuid:version_id>/modules/add/", add_module, name="add-module"),
+    path(
+        "<slug:slug>/studio/versions/<uuid:version_id>/modules/<uuid:module_id>/lessons/new/",
+        lesson_form,
+        name="create-lesson",
+    ),
+    path(
+        "<slug:slug>/studio/versions/<uuid:version_id>/modules/<uuid:module_id>/lessons/<uuid:lesson_id>/edit/",
+        lesson_form,
+        name="edit-lesson",
+    ),
+    path(
+        "<slug:slug>/studio/versions/<uuid:version_id>/lessons/<uuid:lesson_id>/questions/new/",
+        question_form,
+        name="create-question",
+    ),
+    path(
+        "<slug:slug>/studio/versions/<uuid:version_id>/lessons/<uuid:lesson_id>/questions/<uuid:question_id>/edit/",
+        question_form,
+        name="edit-question",
+    ),
+    path("<slug:slug>/studio/versions/<uuid:version_id>/publish/", publish_version, name="publish-version"),
+]
