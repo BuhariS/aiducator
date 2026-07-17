@@ -24,6 +24,7 @@
             <label class="mb-2 block text-sm font-bold text-slate-700" for="id_password">Password</label>
             {{ form.password }}
           </div>
+          <p class="text-right text-sm"><a class="font-bold text-emerald hover:underline" href="{% url 'accounts:password-reset' %}">Forgot your password?</a></p>
           <button class="primary-button w-full" type="submit">Sign in</button>
         </form>
         <p class="mt-6 text-center text-sm text-slate-500">New to AIDUCATOR? <a class="font-bold text-emerald hover:underline" href="{% url 'accounts:signup' %}">Create an account</a></p>

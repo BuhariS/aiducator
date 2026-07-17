@@ -1,4 +1,5 @@
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied
 from django.conf import settings
 from django.db import transaction
 from django.db.models import Q
@@ -8,7 +9,7 @@ from django.utils import timezone
 
 from ai_engine.models import AIJob
 from ai_engine.tasks import grade_attempt
-from accounts.access import user_has_teacher_access
+from accounts.access import user_has_teacher_access, user_is_teacher
 from analytics.models import LearningEvent
 from gamification.models import XPEvent
 from enrollments.models import Enrollment, LessonProgress
@@ -106,6 +107,10 @@ def _review_item_for_teacher(request, review_id):
 
 @login_required
 def review_queue(request):
+    if not user_is_teacher(request.user):
+        from django.http import HttpResponseForbidden
+
+        return HttpResponseForbidden("You do not have access to teacher reviews.")
     items = (
         ReviewQueueItem.objects.filter(status=ReviewQueueItem.Status.OPEN)
         .filter(Q(assigned_to=request.user) | Q(assigned_to__isnull=True))
@@ -149,6 +154,12 @@ def review_detail(request, review_id):
 def finalize_review(item, teacher, final_score, reason=""):
     attempt = item.attempt
     course = attempt.question.lesson_version.module.course_version.course
+    if not user_has_teacher_access(teacher, course.organization):
+        raise PermissionDenied("You do not have permission to finalize this review.")
+    if item.status != ReviewQueueItem.Status.OPEN:
+        raise PermissionDenied("This review has already been resolved.")
+    if not 0 <= final_score <= 100:
+        raise ValueError("Final score must be between 0 and 100.")
     passed = final_score >= course.passing_score
     attempts_used = Attempt.objects.filter(enrollment=attempt.enrollment, question=attempt.question).count()
     progress, _ = LessonProgress.objects.get_or_create(

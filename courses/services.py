@@ -2,14 +2,25 @@ from copy import deepcopy
 
 from django.db import transaction
 from django.db.models import Max
+from django.core.exceptions import PermissionDenied
 
+from accounts.access import user_has_teacher_access
 from assessments.models import Question, RubricVersion
 
 from .models import Course, CourseVersion, LessonArtifact, LessonVersion, Module, Translation
 
 
 @transaction.atomic
-def create_draft_version(course: Course, source: CourseVersion | None = None) -> CourseVersion:
+def create_draft_version(
+    course: Course,
+    source: CourseVersion | None = None,
+    *,
+    actor,
+) -> CourseVersion:
+    if not user_has_teacher_access(actor, course.organization):
+        raise PermissionDenied("You do not have permission to create a draft for this course.")
+    if source is not None and source.course_id != course.id:
+        raise PermissionDenied("The source version does not belong to this course.")
     if source is None:
         source = course.versions.order_by("-version_number").first()
     next_number = (course.versions.aggregate(max_number=Max("version_number"))["max_number"] or 0) + 1

@@ -1,6 +1,7 @@
 import uuid
 
 from django.contrib.auth import login
+from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import LoginView
 from django.db import transaction
 from django.shortcuts import redirect, render
@@ -10,6 +11,7 @@ from django.views.generic import CreateView
 
 from organizations.models import Membership, Organization
 
+from .access import user_has_admin_access, user_is_teacher
 from .forms import EmailAuthenticationForm, SignUpForm
 
 
@@ -62,11 +64,13 @@ class StudentSignUpView(SignUpView):
 def dashboard(request):
     if not request.user.is_authenticated:
         return redirect("accounts:login")
-    memberships = Membership.objects.filter(user=request.user).select_related("organization")
-    if memberships.filter(role__in=[Membership.Role.TEACHER, Membership.Role.ADMIN, Membership.Role.OWNER]).exists():
+    if user_has_admin_access(request.user):
+        return redirect("dashboard:administrator-dashboard")
+    if user_is_teacher(request.user):
         return redirect("dashboard:teacher-dashboard")
     return redirect("dashboard:student-dashboard")
 
 
+@login_required
 def profile(request):
     return render(request, "accounts/profile.html")

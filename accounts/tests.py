@@ -1,5 +1,7 @@
+from django.core import mail
 from django.test import TestCase
 from django.urls import reverse
+from django.test import override_settings
 
 from organizations.models import Membership
 
@@ -66,3 +68,20 @@ class AuthenticationTests(TestCase):
         )
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, reverse("accounts:dashboard"))
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_user_can_request_a_password_reset(self):
+        User.objects.create_user(email="recover@example.com", password="StrongPass123!")
+        response = self.client.post(
+            reverse("accounts:password-reset"),
+            {"email": "recover@example.com"},
+        )
+        self.assertRedirects(response, reverse("accounts:password-reset-done"))
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn("/accounts/reset/", mail.outbox[0].body)
+
+    def test_authenticated_session_security_defaults_are_enabled(self):
+        from django.conf import settings
+
+        self.assertTrue(settings.SESSION_COOKIE_HTTPONLY)
+        self.assertEqual(settings.SESSION_COOKIE_SAMESITE, "Lax")

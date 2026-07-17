@@ -1,4 +1,5 @@
 from django.test import TestCase, override_settings
+from django.core.exceptions import PermissionDenied
 from django.utils import timezone
 from django.urls import reverse
 
@@ -9,6 +10,7 @@ from enrollments.models import Enrollment
 from organizations.models import Membership, Organization
 
 from .models import Attempt, GradeDecision, Question, ReviewQueueItem, RubricVersion
+from .views import finalize_review
 
 
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True, AI_LLM_PROVIDER="fake")
@@ -86,3 +88,17 @@ class AttemptFlowTests(TestCase):
         )
         self.assertEqual(response.status_code, 400)
         self.assertEqual(Attempt.objects.count(), 3)
+
+    def test_review_service_rejects_teacher_from_another_organization(self):
+        outsider = User.objects.create_user(email="outsider@example.com", password="StrongPass123!")
+        review = ReviewQueueItem.objects.create(
+            attempt=Attempt.objects.create(
+                enrollment=self.enrollment,
+                question=self.question,
+                attempt_number=1,
+                answer_text="An answer.",
+            ),
+            reason="Manual review",
+        )
+        with self.assertRaises(PermissionDenied):
+            finalize_review(review, outsider, 70)

@@ -6,7 +6,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
 
-from accounts.access import user_has_teacher_access
+from accounts.access import user_has_teacher_access, user_is_student, user_is_teacher
 from assessments.forms import QuestionForm, RubricForm
 from assessments.models import Question, ReviewQueueItem, RubricVersion
 from enrollments.models import Enrollment, LessonProgress
@@ -73,6 +73,8 @@ def learn(request, slug):
 
 @login_required
 def student_dashboard(request):
+    if not user_is_student(request.user):
+        return HttpResponseForbidden("You do not have access to the student dashboard.")
     enrollments = Enrollment.objects.filter(student=request.user, status=Enrollment.Status.ACTIVE).select_related("course", "course_version")
     for enrollment in enrollments:
         enrollment.progress_count = enrollment.lesson_progress.filter(status=LessonProgress.Status.COMPLETED).count()
@@ -82,6 +84,8 @@ def student_dashboard(request):
 
 @login_required
 def teacher_dashboard(request):
+    if not user_is_teacher(request.user):
+        return HttpResponseForbidden("You do not have access to the teacher dashboard.")
     courses = Course.objects.filter(created_by=request.user).select_related("organization").order_by("-updated_at")
     review_count = ReviewQueueItem.objects.filter(status=ReviewQueueItem.Status.OPEN, assigned_to=request.user).count()
     return render(request, "courses/teacher_dashboard.html", {"courses": courses, "review_count": review_count})
@@ -108,7 +112,7 @@ def create_course(request):
             course.created_by = request.user
             course.status = Course.Status.DRAFT
             course.save()
-            draft = create_draft_version(course)
+            draft = create_draft_version(course, actor=request.user)
         messages.success(request, "Course created. Start building the first draft version.")
         return redirect("teacher_courses:version-editor", slug=course.slug, version_id=draft.id)
     return render(request, "courses/course_form.html", {"form": form})
@@ -139,7 +143,7 @@ def create_course_version(request, slug):
         return HttpResponseForbidden("You do not have access to this course studio.")
     draft = course.versions.filter(status=CourseVersion.Status.DRAFT).first()
     if draft is None:
-        draft = create_draft_version(course)
+        draft = create_draft_version(course, actor=request.user)
     return redirect("teacher_courses:version-editor", slug=course.slug, version_id=draft.id)
 
 

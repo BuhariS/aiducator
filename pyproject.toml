@@ -9,6 +9,7 @@ dependencies = [
     "dj-database-url>=2.2,<3.0",
     "django-environ>=0.11,<1.0",
     "django-htmx>=1.21,<2.0",
+    "django-storages[s3]>=1.14,<2.0",
     "openai>=1.100,<2.0",
     "psycopg[binary]>=3.2,<4.0",
     "pydantic>=2.9,<3.0",

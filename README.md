@@ -12,6 +12,8 @@ uv run python manage.py migrate
 uv run python manage.py runserver
 ```
 
+The default local database is SQLite. For PostgreSQL, start the bundled service with `docker compose up -d postgres` and set `DATABASE_URL=postgresql://aiducator:aiducator@localhost:5432/aiducator` in `.env`. Redis is available with `docker compose up -d redis`.
+
 Create accounts at `/accounts/signup/`, or use the role-specific entry points `/accounts/signup/student/` and `/accounts/signup/teacher/`. Teacher signup creates a private organization workspace; every account receives the corresponding student or teacher membership.
 
 Seed the first Python course and demo accounts:
@@ -42,5 +44,7 @@ docker compose up -d redis
 uv run celery -A config worker --loglevel=INFO
 uv run python manage.py runserver
 ```
+
+For production, set `STORAGE_BACKEND=s3` and provide the AWS-compatible bucket and endpoint variables from `.env.example`. Session and CSRF cookies become secure when `DJANGO_DEBUG=0`; configure SMTP variables to enable password-recovery email delivery.
 
 Student submissions create a queued `AIJob`. The worker evaluates the answer with structured output, creates a teacher review item, and records provider usage. Teachers review submissions at `/assessments/reviews/`; confirmed grades update progress, notifications, and XP.
