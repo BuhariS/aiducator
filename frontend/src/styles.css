@@ -22,9 +22,9 @@
   }
 
   .brand-word {
-    @apply text-lg font-black tracking-tight text-ink;
+    @apply text-2xl font-black tracking-tight text-ink;
     font-family: "Cylburn", "Brush Script MT", "Segoe Script", cursive;
-    font-weight: 400;
+    font-weight: 700;
     letter-spacing: 0.01em;
   }
 
