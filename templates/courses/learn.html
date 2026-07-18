@@ -10,4 +10,25 @@
     {% for question in selected_lesson.questions.all %}{% if question.is_active %}<div class="border-t border-slate-100 bg-cloud p-6 sm:p-8"><p class="text-xs font-black uppercase tracking-wider text-emerald">Assessment</p><h3 class="mt-2 text-xl font-black text-ink">{{ question.prompt }}</h3>{% if question.student_attempt.grade_decision %}<p class="mt-3 text-sm font-bold text-emerald">Teacher-confirmed score: {{ question.student_attempt.grade_decision.final_score }}%</p><a class="mt-3 inline-block text-sm font-bold text-emerald hover:underline" href="{% url 'assessments:attempt-status' question.student_attempt.id %}">View feedback →</a>{% elif question.student_attempt.ai_grade %}<p class="mt-3 text-sm font-bold text-amber-800">Tentative AI grade: {{ question.student_attempt.ai_grade.suggested_score }}%</p><p class="mt-2 text-sm leading-6 text-slate-600">This grade is subject to moderation by your teacher and is not final.</p><a class="mt-3 inline-block text-sm font-bold text-emerald hover:underline" href="{% url 'assessments:attempt-status' question.student_attempt.id %}">View tentative feedback →</a>{% elif question.student_attempt %}<p class="mt-3 text-sm font-bold text-amber-800">Your answer is awaiting teacher review.</p><a class="mt-3 inline-block text-sm font-bold text-emerald hover:underline" href="{% url 'assessments:attempt-status' question.student_attempt.id %}">View status →</a>{% else %}<a class="primary-button mt-5" href="{% url 'assessments:submit' question.id %}">Begin assessment</a>{% endif %}</div>{% endif %}{% empty %}<div class="border-t border-slate-100 bg-cloud p-6 sm:p-8">{% if selected_lesson.student_progress.status != 'completed' %}<form method="post" action="{% url 'courses:complete-lesson' course.slug selected_lesson.id %}">{% csrf_token %}<button class="primary-button" type="submit">Mark content complete</button></form>{% else %}<p class="font-bold text-emerald">Lesson completed ✓</p>{% endif %}</div>{% endfor %}
   </article>{% else %}<div class="surface-card p-12 text-center"><p class="text-xl font-black text-ink">Your first lesson is coming soon.</p><p class="mt-2 text-slate-500">Your teacher is preparing the learning experience.</p></div>{% endif %}</div>
 </section>
+{% if selected_lesson %}
+<script>
+(() => {
+  const startedAt = Date.now();
+  const endpoint = "{% url 'analytics:lesson-time' selected_lesson.id %}";
+  const csrfToken = document.cookie.split("; ").find((row) => row.startsWith("csrftoken="))?.split("=")[1];
+  const recordTime = () => {
+    const durationSeconds = Math.min(3600, Math.floor((Date.now() - startedAt) / 1000));
+    if (durationSeconds < 1) return;
+    fetch(endpoint, {
+      method: "POST",
+      keepalive: true,
+      credentials: "same-origin",
+      headers: {"Content-Type": "application/x-www-form-urlencoded", "X-CSRFToken": decodeURIComponent(csrfToken || "")},
+      body: new URLSearchParams({duration_seconds: durationSeconds}),
+    });
+  };
+  window.addEventListener("pagehide", recordTime, {once: true});
+})();
+</script>
+{% endif %}
 {% endblock %}

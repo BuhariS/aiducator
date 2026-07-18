@@ -9,17 +9,20 @@ from enrollments.models import Enrollment
 from organizations.models import Cohort, Membership, Organization
 
 
+def accessible_administrator_organizations(user):
+    if user.is_superuser:
+        return Organization.objects.all()
+    return Organization.objects.filter(
+        memberships__user=user,
+        memberships__role__in=[Membership.Role.OWNER, Membership.Role.ADMIN],
+    ).distinct()
+
+
 @login_required
 def administrator_dashboard(request):
-    if request.user.is_superuser:
-        organizations = Organization.objects.all()
-    else:
-        if not user_has_admin_access(request.user):
-            return HttpResponseForbidden("You do not have access to the administrator dashboard.")
-        organizations = Organization.objects.filter(
-            memberships__user=request.user,
-            memberships__role__in=[Membership.Role.OWNER, Membership.Role.ADMIN],
-        ).distinct()
+    if not user_has_admin_access(request.user):
+        return HttpResponseForbidden("You do not have access to the administrator dashboard.")
+    organizations = accessible_administrator_organizations(request.user)
 
     organizations = organizations.annotate(
         course_count=Count("courses", distinct=True),
