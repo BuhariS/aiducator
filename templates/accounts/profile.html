@@ -10,6 +10,7 @@
       <div class="rounded-2xl bg-cloud p-5"><p class="text-xs font-bold uppercase tracking-wider text-slate-500">Email</p><p class="mt-2 font-bold text-ink">{{ request.user.email }}</p></div>
       <div class="rounded-2xl bg-cloud p-5"><p class="text-xs font-bold uppercase tracking-wider text-slate-500">Language</p><p class="mt-2 font-bold text-ink">{{ request.user.preferred_language }}</p></div>
     </div>
+    <div class="mt-8 flex flex-wrap gap-3 border-t border-slate-100 pt-6"><a class="primary-button" href="{% url 'accounts:dashboard' %}">Open dashboard</a><a class="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-ink transition hover:border-emerald hover:text-emerald" href="{% url 'courses:catalog' %}">Browse courses</a></div>
   </div>
 </section>
 {% endblock %}

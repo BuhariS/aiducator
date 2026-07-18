@@ -2,10 +2,13 @@
 {% block title %}Administrator dashboard · AIDUCATOR{% endblock %}
 {% block content %}
 <section class="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+  <div class="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
   <div>
     <p class="text-sm font-bold uppercase tracking-[0.2em] text-emerald">Administration</p>
     <h1 class="mt-3 text-4xl font-black text-ink">Keep your learning spaces healthy.</h1>
     <p class="mt-3 max-w-2xl text-slate-500">Monitor organizations, teachers, students, courses, and enrollments from one scoped view.</p>
+  </div>
+  {% if request.user.is_staff %}<a class="primary-button" href="{% url 'admin:index' %}">Open admin console</a>{% endif %}
   </div>
   <div class="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
     <div class="surface-card p-6"><p class="text-sm font-bold text-slate-500">Organizations</p><p class="mt-3 text-4xl font-black text-ink">{{ organizations|length }}</p></div>

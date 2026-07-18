@@ -56,6 +56,23 @@ class AttemptFlowTests(TestCase):
         self.assertEqual(attempt.status, Attempt.Status.AWAITING_REVIEW)
         self.assertEqual(ReviewQueueItem.objects.filter(attempt=attempt, status=ReviewQueueItem.Status.OPEN).count(), 1)
 
+    def test_student_sees_tentative_ai_grade_with_moderation_notice(self):
+        self.client.force_login(self.student)
+        with self.captureOnCommitCallbacks(execute=True):
+            self.client.post(
+                reverse("assessments:submit", kwargs={"question_id": self.question.id}),
+                {"answer_text": "A variable stores a value and gives it a reusable name."},
+            )
+
+        attempt = Attempt.objects.get()
+        response = self.client.get(reverse("assessments:attempt-status", kwargs={"attempt_id": attempt.id}))
+
+        self.assertContains(response, "Your tentative AI grade is ready.")
+        self.assertContains(response, "Tentative AI grade")
+        self.assertContains(response, f"{attempt.ai_grade.suggested_score}%")
+        self.assertContains(response, "Subject to teacher moderation")
+        self.assertContains(response, "not your final result")
+
     def test_teacher_can_confirm_ai_grade(self):
         self.client.force_login(self.student)
         with self.captureOnCommitCallbacks(execute=True):
