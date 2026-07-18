@@ -33,6 +33,8 @@ npm run build
 
 Use `npm run dev` during UI development. The implementation plan, schema, user journeys, screen inventory, and acceptance criteria are in `docs/phase-1-specification.md`. Phase 3 workflow details are in `docs/phase-3-implementation.md`.
 
+Teacher course-generation details are in `docs/phase-4-course-generation.md`.
+
 ## AI grading worker
 
 Copy `.env.example` to `.env`. The default `fake` provider is safe for local development. To use OpenAI, set `AI_LLM_PROVIDER=openai` and provide `OPENAI_API_KEY` in `.env`. Keep the key server-side and never expose it to templates or JavaScript.

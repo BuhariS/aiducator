@@ -169,6 +169,9 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-5.6")
 OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "")
 AI_PROMPT_VERSION = os.environ.get("AI_PROMPT_VERSION", "grading-v1")
+AI_COURSE_PROMPT_VERSION = os.environ.get("AI_COURSE_PROMPT_VERSION", "course-generation-v1")
+AI_INPUT_COST_PER_1K = os.environ.get("AI_INPUT_COST_PER_1K", "0")
+AI_OUTPUT_COST_PER_1K = os.environ.get("AI_OUTPUT_COST_PER_1K", "0")
 
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
 LOGGING = {

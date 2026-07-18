@@ -6,15 +6,17 @@ from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
+from django.conf import settings
 
-from accounts.access import user_has_teacher_access, user_is_student, user_is_teacher
+from accounts.access import user_has_admin_access, user_has_teacher_access, user_is_student, user_is_teacher
+from ai_engine.models import AIJob, CourseGenerationRequest
 from assessments.forms import QuestionForm, RubricForm
 from assessments.models import Attempt, Question, ReviewQueueItem, RubricVersion
 from enrollments.models import Enrollment, LessonProgress
 from enrollments.services import mark_lesson_complete
 from organizations.models import Membership
 
-from .forms import ArtifactForm, CourseForm, LessonForm, ModuleForm
+from .forms import ArtifactForm, CourseForm, CourseGenerationForm, LessonForm, ModuleForm
 from .models import Course, CourseVersion, LessonArtifact, LessonVersion, Module
 from .services import create_draft_version
 
@@ -160,6 +162,86 @@ def create_course(request):
 
 
 @login_required
+@require_http_methods(["GET", "POST"])
+def generate_course(request):
+    membership = (
+        request.user.memberships.filter(
+            role__in=[Membership.Role.OWNER, Membership.Role.ADMIN, Membership.Role.TEACHER],
+        )
+        .select_related("organization")
+        .first()
+    )
+    if membership is None:
+        return HttpResponseForbidden("You must belong to a teacher organization to generate a course.")
+
+    form = CourseGenerationForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        with transaction.atomic():
+            course = Course.objects.create(
+                organization=membership.organization,
+                created_by=request.user,
+                title=form.cleaned_data["title"],
+                description=form.cleaned_data["objective"],
+                duration_weeks=form.cleaned_data["duration_weeks"],
+                status=Course.Status.DRAFT,
+            )
+            generation_request = CourseGenerationRequest.objects.create(
+                created_by=request.user,
+                course=course,
+                title=form.cleaned_data["title"],
+                objective=form.cleaned_data["objective"],
+                duration_weeks=form.cleaned_data["duration_weeks"],
+                audience=form.cleaned_data["audience"],
+                free_prompt=form.cleaned_data["free_prompt"],
+                translation_languages=form.cleaned_data["translation_languages"],
+            )
+            job = AIJob.objects.create(
+                job_type=AIJob.JobType.COURSE_GENERATION,
+                entity_type="course_generation_request",
+                entity_id=generation_request.id,
+                status=AIJob.Status.QUEUED,
+                prompt_version=settings.AI_COURSE_PROMPT_VERSION,
+            )
+            transaction.on_commit(lambda: _enqueue_course_generation(job.id))
+        messages.success(request, "Course generation started. Review the draft before publishing.")
+        return redirect("teacher_courses:generation-status", request_id=generation_request.id)
+    return render(request, "courses/course_generation_form.html", {"form": form})
+
+
+@login_required
+def generation_status(request, request_id):
+    generation_request = get_object_or_404(
+        CourseGenerationRequest.objects.select_related("course", "generated_version"),
+        id=request_id,
+        created_by=request.user,
+    )
+    job = AIJob.objects.filter(
+        job_type=AIJob.JobType.COURSE_GENERATION,
+        entity_type="course_generation_request",
+        entity_id=generation_request.id,
+    ).order_by("-created_at").first()
+    return render(
+        request,
+        "courses/course_generation_status.html",
+        {"generation_request": generation_request, "job": job},
+    )
+
+
+def _enqueue_course_generation(job_id):
+    try:
+        from ai_engine.tasks import generate_course
+
+        if settings.CELERY_TASK_ALWAYS_EAGER:
+            generate_course.apply(args=[str(job_id)])
+        else:
+            generate_course.delay(str(job_id))
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception("Unable to enqueue course generation job %s", job_id)
+
+
+@login_required
 def course_studio(request, slug):
     course = get_object_or_404(Course, slug=slug)
     if not user_has_teacher_access(request.user, course.organization):
@@ -172,8 +254,31 @@ def course_studio(request, slug):
             "course": course,
             "versions": versions,
             "draft_version": versions.filter(status=CourseVersion.Status.DRAFT).first(),
+            "can_delete": course.created_by_id == request.user.id or user_has_admin_access(request.user, course.organization),
         },
     )
+
+
+@login_required
+@require_POST
+def delete_course(request, slug):
+    course = get_object_or_404(Course, slug=slug)
+    if not user_has_teacher_access(request.user, course.organization):
+        return HttpResponseForbidden("You do not have access to delete this course.")
+    if course.created_by_id != request.user.id and not user_has_admin_access(request.user, course.organization):
+        return HttpResponseForbidden("Only the course creator or an organization administrator can delete this course.")
+    if course.status != Course.Status.DRAFT:
+        messages.error(request, "Only draft courses can be deleted. Published courses must be archived instead.")
+        return redirect("teacher_courses:studio", slug=course.slug)
+    if course.enrollments.exists():
+        messages.error(request, "This course cannot be deleted because learners are enrolled in it.")
+        return redirect("teacher_courses:studio", slug=course.slug)
+
+    course_title = course.title
+    with transaction.atomic():
+        course.delete()
+    messages.success(request, f'Course "{course_title}" was deleted.')
+    return redirect("dashboard:teacher-dashboard")
 
 
 @login_required
@@ -401,5 +506,9 @@ def publish_version(request, slug, version_id):
         version.save(update_fields=["status", "approved_by", "approved_at"])
         course.status = Course.Status.PUBLISHED
         course.save(update_fields=["status", "updated_at"])
+        CourseGenerationRequest.objects.filter(generated_version=version).update(
+            status=CourseGenerationRequest.Status.PUBLISHED,
+            completed_at=now,
+        )
     messages.success(request, f"Version {version.version_number} is now published and immutable.")
     return redirect("teacher_courses:studio", slug=course.slug)

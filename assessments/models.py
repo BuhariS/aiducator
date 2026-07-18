@@ -15,6 +15,11 @@ class Question(models.Model):
         CODE_WRITING = "code_writing", "Code writing"
         DEBUGGING = "debugging", "Debugging"
         REFLECTION = "reflection", "Reflection"
+        SCENARIO = "scenario", "Scenario-based"
+        CRITICAL_THINKING = "critical_thinking", "Critical thinking"
+        TASK_PROMPT = "task_prompt", "Task prompt generation"
+        MISCONCEPTION = "misconception", "Common misconception"
+        ERROR_IDENTIFICATION = "error_identification", "Identify the mistakes"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     lesson_version = models.ForeignKey(LessonVersion, on_delete=models.CASCADE, related_name="questions")

@@ -1,8 +1,9 @@
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
+from ai_engine.models import AIJob, CourseGenerationRequest
 from accounts.models import User
 from enrollments.models import Enrollment
 from organizations.models import Membership, Organization
@@ -92,6 +93,38 @@ class CourseAuthoringTests(TestCase):
         self.client.force_login(student)
         response = self.client.get(reverse("teacher_courses:create"))
         self.assertEqual(response.status_code, 403)
+
+    def test_course_creator_can_delete_draft_course(self):
+        response = self.client.post(reverse("teacher_courses:delete", kwargs={"slug": self.course.slug}))
+        self.assertRedirects(response, reverse("dashboard:teacher-dashboard"))
+        self.assertFalse(Course.objects.filter(id=self.course.id).exists())
+
+    def test_another_teacher_cannot_delete_course(self):
+        other_teacher = User.objects.create_user(email="other-teacher@example.com", password="StrongPass123!")
+        Membership.objects.create(
+            organization=self.organization,
+            user=other_teacher,
+            role=Membership.Role.TEACHER,
+        )
+        self.client.force_login(other_teacher)
+        response = self.client.post(reverse("teacher_courses:delete", kwargs={"slug": self.course.slug}))
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(Course.objects.filter(id=self.course.id).exists())
+
+    def test_published_course_cannot_be_deleted(self):
+        self.course.status = Course.Status.PUBLISHED
+        self.course.save(update_fields=["status"])
+        response = self.client.post(reverse("teacher_courses:delete", kwargs={"slug": self.course.slug}))
+        self.assertRedirects(response, reverse("teacher_courses:studio", kwargs={"slug": self.course.slug}))
+        self.assertTrue(Course.objects.filter(id=self.course.id).exists())
+
+    def test_enrolled_draft_course_cannot_be_deleted(self):
+        version = CourseVersion.objects.create(course=self.course, version_number=1, status=CourseVersion.Status.DRAFT)
+        student = User.objects.create_user(email="enrolled-student@example.com", password="StrongPass123!")
+        Enrollment.objects.create(course=self.course, course_version=version, student=student)
+        response = self.client.post(reverse("teacher_courses:delete", kwargs={"slug": self.course.slug}))
+        self.assertRedirects(response, reverse("teacher_courses:studio", kwargs={"slug": self.course.slug}))
+        self.assertTrue(Course.objects.filter(id=self.course.id).exists())
 
     def test_teacher_can_build_and_publish_course_version(self):
         response = self.client.post(reverse("teacher_courses:create-version", kwargs={"slug": self.course.slug}))
@@ -233,3 +266,103 @@ class StudentProgressionTests(TestCase):
             reverse("courses:learn-lesson", kwargs={"slug": self.course.slug, "lesson_id": self.lesson.id}),
         )
         self.assertEqual(self.enrollment.lesson_progress.get().status, "completed")
+
+
+@override_settings(CELERY_TASK_ALWAYS_EAGER=True, AI_LLM_PROVIDER="fake")
+class CourseGenerationTests(TestCase):
+    def setUp(self):
+        self.teacher = User.objects.create_user(email="generator@example.com", password="StrongPass123!")
+        self.organization = Organization.objects.create(name="Generation School", slug="generation-school")
+        Membership.objects.create(
+            organization=self.organization,
+            user=self.teacher,
+            role=Membership.Role.TEACHER,
+        )
+        self.client.force_login(self.teacher)
+
+    def test_teacher_generation_creates_reviewable_unpublished_draft(self):
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(
+                reverse("teacher_courses:generate"),
+                {
+                    "title": "Python Problem Solving",
+                    "objective": "Learn Python",
+                    "duration_weeks": 12,
+                    "audience": "Nigerian secondary-school students",
+                    "translation_languages": "yo-NG, ha-NG",
+                    "free_prompt": "Use relatable classroom and community examples.",
+                },
+            )
+
+        generation_request = CourseGenerationRequest.objects.get()
+        job = AIJob.objects.get(entity_id=generation_request.id)
+        generation_request.refresh_from_db()
+        version = generation_request.generated_version
+
+        self.assertRedirects(
+            response,
+            reverse("teacher_courses:generation-status", kwargs={"request_id": generation_request.id}),
+        )
+        self.assertEqual(job.status, AIJob.Status.SUCCEEDED)
+        self.assertEqual(job.progress, 100)
+        self.assertEqual(generation_request.status, CourseGenerationRequest.Status.REVIEW)
+        self.assertTrue(version.generated_by_ai)
+        self.assertEqual(version.status, CourseVersion.Status.DRAFT)
+        self.assertEqual(version.course.status, Course.Status.DRAFT)
+        self.assertGreater(version.modules.count(), 0)
+        self.assertGreater(version.modules.first().lessons.first().questions.count(), 0)
+        self.assertEqual(version.modules.first().lessons.first().translations.count(), 2)
+        self.assertFalse(CourseVersion.objects.filter(status=CourseVersion.Status.PUBLISHED).exists())
+
+        status_response = self.client.get(
+            reverse("teacher_courses:generation-status", kwargs={"request_id": generation_request.id})
+        )
+        self.assertContains(status_response, "Draft ready for teacher review.")
+        self.assertContains(status_response, "Review draft in Course Studio")
+
+    def test_student_cannot_view_another_users_generation_status(self):
+        student = User.objects.create_user(email="generation-student@example.com", password="StrongPass123!")
+        generation_request = CourseGenerationRequest.objects.create(
+            created_by=self.teacher,
+            course=Course.objects.create(
+                organization=self.organization,
+                created_by=self.teacher,
+                title="Private generated course",
+            ),
+            title="Private generated course",
+        )
+        self.client.force_login(student)
+        response = self.client.get(
+            reverse("teacher_courses:generation-status", kwargs={"request_id": generation_request.id})
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_generation_preserves_an_existing_manual_draft(self):
+        course = Course.objects.create(
+            organization=self.organization,
+            created_by=self.teacher,
+            title="Existing Manual Course",
+        )
+        manual_version = CourseVersion.objects.create(course=course, version_number=1, status=CourseVersion.Status.DRAFT)
+        Module.objects.create(course_version=manual_version, title="Manual module", position=1)
+        request = CourseGenerationRequest.objects.create(
+            created_by=self.teacher,
+            course=course,
+            title=course.title,
+            objective="Learn Python",
+            duration_weeks=4,
+            audience="Secondary students",
+        )
+        job = AIJob.objects.create(
+            job_type=AIJob.JobType.COURSE_GENERATION,
+            entity_type="course_generation_request",
+            entity_id=request.id,
+        )
+
+        from ai_engine.tasks import generate_course
+
+        generate_course.apply(args=[str(job.id)]).get()
+        request.refresh_from_db()
+        self.assertEqual(request.generated_version.version_number, 2)
+        self.assertEqual(manual_version.modules.get().title, "Manual module")
+        self.assertGreater(request.generated_version.modules.count(), 0)

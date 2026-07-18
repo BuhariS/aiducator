@@ -132,6 +132,8 @@ class LessonArtifact(models.Model):
         IMAGE = "image", "Image"
         SIMULATION = "simulation_link", "Simulation link"
         CODE = "code_example", "Code example"
+        IMAGE_PROMPT = "image_prompt", "Image prompt"
+        YOUTUBE_SEARCH = "youtube_search", "YouTube search suggestion"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     lesson_version = models.ForeignKey(LessonVersion, on_delete=models.CASCADE, related_name="artifacts")

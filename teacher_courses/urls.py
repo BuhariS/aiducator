@@ -6,6 +6,9 @@ from courses.views import (
     course_studio,
     create_course,
     create_course_version,
+    delete_course,
+    generate_course,
+    generation_status,
     lesson_form,
     publish_version,
     question_form,
@@ -17,7 +20,10 @@ app_name = "teacher_courses"
 
 urlpatterns = [
     path("new/", create_course, name="create"),
+    path("generate/", generate_course, name="generate"),
+    path("generate/<uuid:request_id>/status/", generation_status, name="generation-status"),
     path("<slug:slug>/studio/", course_studio, name="studio"),
+    path("<slug:slug>/delete/", delete_course, name="delete"),
     path("<slug:slug>/studio/versions/new/", create_course_version, name="create-version"),
     path("<slug:slug>/studio/versions/<uuid:version_id>/", version_editor, name="version-editor"),
     path("<slug:slug>/studio/versions/<uuid:version_id>/preview/", preview_version, name="preview-version"),

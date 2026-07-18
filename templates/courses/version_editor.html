@@ -5,7 +5,7 @@
   <div class="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
     <a class="text-sm font-bold text-emerald hover:underline" href="{% url 'teacher_courses:studio' course.slug %}">← Course Studio</a>
     <div class="mt-6 flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
-      <div><p class="text-sm font-black uppercase tracking-wider text-emerald">Draft version {{ version.version_number }}</p><h1 class="mt-2 text-4xl font-black text-ink">Shape the learning experience</h1><p class="mt-3 max-w-2xl text-slate-500">Everything here remains private until validation passes and you publish.</p></div>
+      <div><p class="text-sm font-black uppercase tracking-wider text-emerald">Draft version {{ version.version_number }}{% if version.generated_by_ai %} · AI-generated{% endif %}</p><h1 class="mt-2 text-4xl font-black text-ink">Shape the learning experience</h1><p class="mt-3 max-w-2xl text-slate-500">{% if version.generated_by_ai %}Review every generated lesson, artifact, question, rubric, and translation before publishing.{% else %}Everything here remains private until validation passes and you publish.{% endif %}</p></div>
       <div class="flex flex-wrap gap-3">
         <a class="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-ink hover:border-emerald hover:text-emerald" href="{% url 'teacher_courses:preview-version' course.slug version.id %}">Preview student view</a>
         <form method="post" action="{% url 'teacher_courses:publish-version' course.slug version.id %}">{% csrf_token %}<button class="primary-button" type="submit">Validate and publish</button></form>

@@ -29,6 +29,61 @@ class CourseForm(forms.ModelForm):
         return title
 
 
+class CourseGenerationForm(forms.Form):
+    title = forms.CharField(
+        max_length=180,
+        label="Course title",
+        widget=forms.TextInput(attrs={"placeholder": "Secondary-school Python programming"}),
+    )
+    objective = forms.CharField(
+        required=False,
+        label="Learning objective",
+        help_text="State what learners should know and apply. A free prompt can provide this instead.",
+        widget=forms.Textarea(attrs={"rows": 4, "placeholder": "Learners will know and apply Python fundamentals..."}),
+    )
+    duration_weeks = forms.IntegerField(min_value=1, max_value=52, initial=12, label="Duration in weeks")
+    audience = forms.CharField(
+        max_length=180,
+        required=False,
+        initial="Nigerian secondary-school students",
+        widget=forms.TextInput(attrs={"placeholder": "Nigerian secondary-school students"}),
+    )
+    translation_languages = forms.CharField(
+        required=False,
+        label="Translation languages",
+        help_text="Optional comma-separated language codes, for example yo-NG, ha-NG, ig-NG.",
+        widget=forms.TextInput(attrs={"placeholder": "yo-NG, ha-NG, ig-NG"}),
+    )
+    free_prompt = forms.CharField(
+        required=False,
+        label="Additional teacher prompt",
+        help_text="Use this for creative direction, local examples, pacing, or a fully free-form request.",
+        widget=forms.Textarea(attrs={"rows": 7, "placeholder": "Create practical lessons using Nigerian classroom examples..."}),
+    )
+
+    def clean_title(self):
+        title = self.cleaned_data["title"].strip()
+        slug = slugify(title)
+        if not slug:
+            raise forms.ValidationError("Use letters or numbers so the course can have a web address.")
+        if Course.objects.filter(slug=slug).exists():
+            raise forms.ValidationError("A course with this title already exists. Choose a different title.")
+        return title
+
+    def clean_translation_languages(self):
+        value = self.cleaned_data.get("translation_languages", "")
+        languages = [item.strip() for item in value.split(",") if item.strip()]
+        if len(languages) > 12:
+            raise forms.ValidationError("Request no more than 12 translation languages.")
+        return languages
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if not cleaned_data.get("objective", "").strip() and not cleaned_data.get("free_prompt", "").strip():
+            raise forms.ValidationError("Add a learning objective or an additional teacher prompt.")
+        return cleaned_data
+
+
 class ModuleForm(forms.ModelForm):
     class Meta:
         model = Module
@@ -62,7 +117,12 @@ class ArtifactForm(forms.ModelForm):
             self.add_error("content", "Add a video URL or upload a video file.")
         if artifact_type == LessonArtifact.ArtifactType.SIMULATION and not content:
             self.add_error("content", "Add a simulation URL.")
-        if artifact_type == LessonArtifact.ArtifactType.TEXT and not content:
+        if artifact_type in {
+            LessonArtifact.ArtifactType.TEXT,
+            LessonArtifact.ArtifactType.CODE,
+            LessonArtifact.ArtifactType.IMAGE_PROMPT,
+            LessonArtifact.ArtifactType.YOUTUBE_SEARCH,
+        } and not content:
             self.add_error("content", "Add text content.")
         if content and artifact_type in {
             LessonArtifact.ArtifactType.IMAGE,

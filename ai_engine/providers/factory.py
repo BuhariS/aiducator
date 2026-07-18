@@ -1,8 +1,8 @@
 from django.conf import settings
 
-from .base import GradingProvider, ProviderError
-from .fake import FakeGradingProvider
-from .openai import OpenAIGradingProvider
+from .base import CourseGenerationProvider, GradingProvider, ProviderError
+from .fake import FakeCourseGenerationProvider, FakeGradingProvider
+from .openai import OpenAICourseGenerationProvider, OpenAIGradingProvider
 
 
 def get_grading_provider() -> GradingProvider:
@@ -10,4 +10,12 @@ def get_grading_provider() -> GradingProvider:
         return FakeGradingProvider()
     if settings.AI_LLM_PROVIDER == "openai":
         return OpenAIGradingProvider()
+    raise ProviderError(f"Unsupported AI_LLM_PROVIDER: {settings.AI_LLM_PROVIDER}")
+
+
+def get_course_generation_provider() -> CourseGenerationProvider:
+    if settings.AI_LLM_PROVIDER == "fake":
+        return FakeCourseGenerationProvider()
+    if settings.AI_LLM_PROVIDER == "openai":
+        return OpenAICourseGenerationProvider()
     raise ProviderError(f"Unsupported AI_LLM_PROVIDER: {settings.AI_LLM_PROVIDER}")
