@@ -4,7 +4,7 @@
 <section class="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
   <div class="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
     <div><p class="text-sm font-bold uppercase tracking-[0.2em] text-emerald">Teacher workspace</p><h1 class="mt-3 text-4xl font-black text-ink">Make every lesson count.</h1><p class="mt-3 max-w-2xl text-slate-500">Prepare courses, review AI-assisted feedback, and see where your learners need support.</p></div>
-    <div class="flex flex-wrap gap-3"><a class="rounded-xl border border-emerald px-4 py-2 text-sm font-bold text-emerald transition hover:bg-emerald/5" href="{% url 'teacher_courses:generate' %}">Generate with AI</a><a class="primary-button" href="{% url 'teacher_courses:create' %}">Create a course manually</a></div>
+    <div class="flex flex-wrap gap-3"><a class="inline-flex items-center gap-2 rounded-xl border border-emerald px-4 py-2 text-sm font-bold text-emerald transition hover:bg-emerald/5" href="{% url 'teacher_courses:generate' %}">{% include "components/icon.html" with icon="sparkles" icon_class="h-4 w-4" %}Generate with AI</a><a class="primary-button" href="{% url 'teacher_courses:create' %}">{% include "components/icon.html" with icon="plus" icon_class="h-4 w-4" %}Create a course manually</a></div>
   </div>
   <div class="mt-10 grid gap-6 md:grid-cols-4">
     <div class="surface-card p-6"><p class="text-sm font-bold text-slate-500">Your courses</p><p class="mt-3 text-4xl font-black text-ink">{{ courses|length }}</p></div>

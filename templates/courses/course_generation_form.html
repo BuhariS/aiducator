@@ -8,7 +8,7 @@
     {% csrf_token %}{{ form.non_field_errors }}
     {% for field in form %}<div><label class="mb-2 block text-sm font-bold text-slate-700" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.help_text %}<p class="mt-1 text-xs leading-5 text-slate-500">{{ field.help_text }}</p>{% endif %}{% for error in field.errors %}<p class="mt-1 text-sm font-bold text-red-600">{{ error }}</p>{% endfor %}</div>{% endfor %}
     <div class="rounded-2xl border border-sunshine/40 bg-sunshine/10 p-4 text-sm leading-6 text-amber-900"><strong>Teacher approval required:</strong> generated content remains a draft. You must review it in Course Studio and publish it yourself.</div>
-    <div class="flex flex-wrap items-center justify-between gap-3 pt-2"><a class="text-sm font-bold text-slate-500 hover:text-ink" href="{% url 'dashboard:teacher-dashboard' %}">Cancel</a><button class="primary-button" type="submit">Start AI generation</button></div>
+  <div class="flex flex-wrap items-center justify-between gap-3 pt-2"><a class="text-sm font-bold text-slate-500 hover:text-ink" href="{% url 'dashboard:teacher-dashboard' %}">Cancel</a><button class="primary-button" type="submit">{% include "components/icon.html" with icon="sparkles" icon_class="h-4 w-4" %}Start AI generation</button></div>
   </form>
 </section>
 <style>input, textarea, select { width: 100%; border-radius: .75rem; border: 1px solid rgb(226 232 240); padding: .75rem 1rem; outline: none; background: white; } input:focus, textarea:focus, select:focus { border-color: rgb(15 118 110); box-shadow: 0 0 0 4px rgb(15 118 110 / .1); }</style>

@@ -21,7 +21,7 @@
     {% endfor %}
     <div class="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between">
       <div class="flex flex-wrap gap-4"><a class="text-sm font-bold text-slate-500 hover:text-ink" href="{% url 'dashboard:teacher-dashboard' %}">Cancel</a><a class="text-sm font-bold text-emerald hover:underline" href="{% url 'teacher_courses:generate' %}">Generate with AI instead</a></div>
-      <button class="primary-button" type="submit">Create course and start drafting</button>
+      <button class="primary-button" type="submit">{% include "components/icon.html" with icon="plus" icon_class="h-4 w-4" %}Create course and start drafting</button>
     </div>
   </form>
 </section>
