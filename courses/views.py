@@ -260,6 +260,22 @@ def course_studio(request, slug):
 
 
 @login_required
+@require_http_methods(["GET", "POST"])
+def course_settings(request, slug):
+    course = get_object_or_404(Course, slug=slug)
+    if not user_has_teacher_access(request.user, course.organization):
+        return HttpResponseForbidden("You do not have access to edit this course.")
+    if course.versions.filter(status=CourseVersion.Status.PUBLISHED).exists():
+        return HttpResponseForbidden("Published course settings cannot be edited. Create a new version instead.")
+    form = CourseForm(request.POST or None, instance=course)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        messages.success(request, "Course setup saved.")
+        return redirect("teacher_courses:studio", slug=course.slug)
+    return render(request, "courses/course_settings_form.html", {"course": course, "form": form})
+
+
+@login_required
 @require_POST
 def delete_course(request, slug):
     course = get_object_or_404(Course, slug=slug)
@@ -343,7 +359,30 @@ def version_editor(request, slug, version_id):
     course, version, error = _get_editable_version(request, slug, version_id)
     if error:
         return error
-    return render(request, "courses/version_editor.html", {"course": course, "version": version})
+    modules = list(version.modules.all())
+    version.module_count = len(modules)
+    version.lesson_count = sum(len(module.lessons.all()) for module in modules)
+    version.question_count = sum(
+        len(lesson.questions.all())
+        for module in modules
+        for lesson in module.lessons.all()
+    )
+    version.rubric_count = sum(
+        len(question.rubrics.all())
+        for module in modules
+        for lesson in module.lessons.all()
+        for question in lesson.questions.all()
+    )
+    return render(
+        request,
+        "courses/version_editor.html",
+        {
+            "course": course,
+            "version": version,
+            "modules": modules,
+            "validation_errors": _version_validation_errors(version, modules),
+        },
+    )
 
 
 @login_required
@@ -358,6 +397,13 @@ def add_module(request, slug, version_id):
         module.course_version = version
         module.save()
         messages.success(request, "Module added to the draft version.")
+        if request.POST.get("next") == "lesson":
+            return redirect(
+                "teacher_courses:create-lesson",
+                slug=course.slug,
+                version_id=version.id,
+                module_id=module.id,
+            )
         return redirect("teacher_courses:version-editor", slug=course.slug, version_id=version.id)
     return render(request, "courses/module_form.html", {"course": course, "version": version, "form": form})
 
@@ -406,6 +452,13 @@ def lesson_form(request, slug, version_id, module_id, lesson_id=None):
         saved_lesson.status = LessonVersion.Status.DRAFT
         saved_lesson.save()
         messages.success(request, "Lesson saved to the draft version.")
+        if request.POST.get("next") == "question":
+            return redirect(
+                "teacher_courses:create-question",
+                slug=course.slug,
+                version_id=version.id,
+                lesson_id=saved_lesson.id,
+            )
         return redirect("teacher_courses:version-editor", slug=course.slug, version_id=version.id)
     return render(
         request,
@@ -472,24 +525,8 @@ def publish_version(request, slug, version_id):
     course, version, error = _get_editable_version(request, slug, version_id)
     if error:
         return error
-    validation_errors = []
     modules = list(version.modules.all())
-    if not modules:
-        validation_errors.append("Add at least one module.")
-    for module in modules:
-        lessons = list(module.lessons.all())
-        if not lessons:
-            validation_errors.append(f"Module '{module.title}' needs at least one lesson.")
-        for lesson in lessons:
-            if not lesson.content.strip():
-                validation_errors.append(f"Lesson '{lesson.title}' needs lesson content.")
-            questions = list(lesson.questions.filter(is_active=True))
-            if not questions:
-                validation_errors.append(f"Lesson '{lesson.title}' needs at least one active question.")
-            for question in questions:
-                rubric = question.rubrics.order_by("-version_number").first()
-                if not rubric or not rubric.criteria:
-                    validation_errors.append(f"Question '{question.prompt[:60]}' needs a rubric.")
+    validation_errors = _version_validation_errors(version, modules)
     if validation_errors:
         for message in validation_errors:
             messages.error(request, message)
@@ -512,3 +549,25 @@ def publish_version(request, slug, version_id):
         )
     messages.success(request, f"Version {version.version_number} is now published and immutable.")
     return redirect("teacher_courses:studio", slug=course.slug)
+
+
+def _version_validation_errors(version, modules=None):
+    modules = modules if modules is not None else list(version.modules.all())
+    validation_errors = []
+    if not modules:
+        validation_errors.append("Add at least one module.")
+    for module in modules:
+        lessons = list(module.lessons.all())
+        if not lessons:
+            validation_errors.append(f"Module '{module.title}' needs at least one lesson.")
+        for lesson in lessons:
+            if not lesson.content.strip():
+                validation_errors.append(f"Lesson '{lesson.title}' needs lesson content.")
+            questions = list(lesson.questions.filter(is_active=True))
+            if not questions:
+                validation_errors.append(f"Lesson '{lesson.title}' needs at least one active assessment.")
+            for question in questions:
+                rubric = question.rubrics.order_by("-version_number").first()
+                if not rubric or not rubric.criteria:
+                    validation_errors.append(f"Assessment '{question.prompt[:60]}' needs a rubric.")
+    return validation_errors

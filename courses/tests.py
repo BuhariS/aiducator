@@ -83,6 +83,68 @@ class CourseAuthoringTests(TestCase):
             reverse("teacher_courses:version-editor", kwargs={"slug": course.slug, "version_id": draft.id}),
         )
 
+    def test_course_builder_shows_guided_steps(self):
+        version = CourseVersion.objects.create(course=self.course, version_number=1, status=CourseVersion.Status.DRAFT)
+        response = self.client.get(
+            reverse("teacher_courses:version-editor", kwargs={"slug": self.course.slug, "version_id": version.id})
+        )
+        self.assertContains(response, "Course Builder")
+        self.assertContains(response, "Course setup")
+        self.assertContains(response, "Assessments and rubrics")
+        self.assertContains(response, "Finish these items before publishing")
+
+    def test_module_and_lesson_forms_continue_to_next_step(self):
+        version = CourseVersion.objects.create(course=self.course, version_number=1, status=CourseVersion.Status.DRAFT)
+        response = self.client.post(
+            reverse("teacher_courses:add-module", kwargs={"slug": self.course.slug, "version_id": version.id}),
+            {"title": "Python basics", "position": 1, "next": "lesson"},
+        )
+        module = Module.objects.get(course_version=version)
+        self.assertRedirects(
+            response,
+            reverse(
+                "teacher_courses:create-lesson",
+                kwargs={"slug": self.course.slug, "version_id": version.id, "module_id": module.id},
+            ),
+        )
+
+        response = self.client.post(
+            reverse(
+                "teacher_courses:create-lesson",
+                kwargs={"slug": self.course.slug, "version_id": version.id, "module_id": module.id},
+            ),
+            {
+                "title": "Variables",
+                "position": 1,
+                "objectives_text": "Explain variables",
+                "content": "A variable gives a name to a value in a Python program.",
+                "next": "question",
+            },
+        )
+        lesson = LessonVersion.objects.get(module=module)
+        self.assertRedirects(
+            response,
+            reverse(
+                "teacher_courses:create-question",
+                kwargs={"slug": self.course.slug, "version_id": version.id, "lesson_id": lesson.id},
+            ),
+        )
+
+    def test_teacher_can_edit_course_setup_before_publishing(self):
+        response = self.client.post(
+            reverse("teacher_courses:settings", kwargs={"slug": self.course.slug}),
+            {
+                "title": "Updated Python Course",
+                "description": "Updated course description for Nigerian learners.",
+                "duration_weeks": 12,
+                "passing_score": 70,
+                "max_retries": 2,
+            },
+        )
+        self.assertRedirects(response, reverse("teacher_courses:studio", kwargs={"slug": "updated-python-course"}))
+        self.course.refresh_from_db()
+        self.assertEqual(self.course.title, "Updated Python Course")
+
     def test_student_cannot_create_a_course(self):
         student = User.objects.create_user(email="student-authoring@example.com", password="StrongPass123!")
         Membership.objects.create(

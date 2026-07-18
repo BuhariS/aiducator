@@ -24,9 +24,17 @@ class CourseForm(forms.ModelForm):
         slug = slugify(title)
         if not slug:
             raise forms.ValidationError("Use letters or numbers so the course can have a web address.")
-        if Course.objects.filter(slug=slug).exists():
+        if Course.objects.filter(slug=slug).exclude(pk=self.instance.pk).exists():
             raise forms.ValidationError("A course with this title already exists. Choose a different title.")
         return title
+
+    def save(self, commit=True):
+        course = super().save(commit=False)
+        if course.status == Course.Status.DRAFT:
+            course.slug = slugify(course.title)
+        if commit:
+            course.save()
+        return course
 
 
 class CourseGenerationForm(forms.Form):
