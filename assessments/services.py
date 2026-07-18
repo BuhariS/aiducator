@@ -7,7 +7,7 @@ from accounts.access import user_has_teacher_access
 from analytics.models import LearningEvent
 from enrollments.models import LessonProgress
 from enrollments.services import refresh_course_completion
-from gamification.models import XPEvent
+from gamification.services import record_learning_reward
 from notifications.models import Notification
 
 from .models import (
@@ -131,7 +131,29 @@ def confirm_attempt_grade(attempt, final_score, *, actor=None, reason="", automa
         ai_grade.save(update_fields=["requires_review", "teacher_review_required"])
 
     progression_actor = actor or attempt.enrollment.student
-    refresh_course_completion(attempt.enrollment, actor=progression_actor)
+    completion = refresh_course_completion(attempt.enrollment, actor=progression_actor)
+    if passed:
+        record_learning_reward(
+            enrollment=attempt.enrollment,
+            event_type="assessment_passed",
+            source=attempt,
+            points=10,
+            reason="Confirmed assessment pass",
+            praise=f"You passed {attempt.question.lesson_version.title} with {final_score}%.",
+            badge_key="first_assessment",
+            actor=actor,
+        )
+    if completion:
+        record_learning_reward(
+            enrollment=attempt.enrollment,
+            event_type="course_completed",
+            source=completion,
+            points=50,
+            reason="Completed every lesson in the course",
+            praise=f"You completed {course.title}. Keep building your Python confidence!",
+            badge_key="course_complete",
+            actor=actor,
+        )
     event_type = (
         GradeEvent.EventType.AUTO_CONFIRMED
         if automatic
@@ -166,14 +188,6 @@ def confirm_attempt_grade(attempt, final_score, *, actor=None, reason="", automa
         entity_id=attempt.id,
         metadata={"score": final_score, "passed": passed, "automatic": automatic},
     )
-    if passed and not XPEvent.objects.filter(student=attempt.enrollment.student, source_id=attempt.id).exists():
-        XPEvent.objects.create(
-            student=attempt.enrollment.student,
-            enrollment=attempt.enrollment,
-            event_type="assessment_passed",
-            points=10,
-            source_id=attempt.id,
-        )
     return GradeDecision.objects.get(attempt=attempt), previous_decision
 
 

@@ -3,6 +3,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from accounts.access import user_has_teacher_access
+from gamification.services import record_learning_reward
 
 from .models import CourseCompletion, Enrollment, LessonProgress
 
@@ -28,7 +29,28 @@ def mark_lesson_complete(enrollment, lesson, *, actor):
     progress.status = LessonProgress.Status.COMPLETED
     progress.completed_at = progress.completed_at or timezone.now()
     progress.save(update_fields=["status", "completed_at"])
-    refresh_course_completion(enrollment, actor=actor)
+    record_learning_reward(
+        enrollment=enrollment,
+        event_type="lesson_completed",
+        source=progress,
+        points=5,
+        reason="Completed lesson content",
+        praise=f"You completed {lesson.title}.",
+        badge_key="first_lesson",
+        actor=actor,
+    )
+    completion = refresh_course_completion(enrollment, actor=actor)
+    if completion:
+        record_learning_reward(
+            enrollment=enrollment,
+            event_type="course_completed",
+            source=completion,
+            points=50,
+            reason="Completed every lesson in the course",
+            praise=f"You completed {enrollment.course.title}. Keep building your Python confidence!",
+            badge_key="course_complete",
+            actor=actor,
+        )
     return progress
 
 
