@@ -2,7 +2,7 @@
 {% block title %}Create course · Aiducator{% endblock %}
 {% block content %}
 <section class="mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8">
-  <a class="text-sm font-bold text-emerald hover:underline" href="{% url 'dashboard:teacher-dashboard' %}">← Teacher dashboard</a>
+  <a class="inline-flex items-center gap-2 text-sm font-bold text-emerald hover:underline" href="{% url 'dashboard:teacher-dashboard' %}">{% include "components/icon.html" with icon="arrow-left" icon_class="h-4 w-4" %}Teacher dashboard</a>
   <div class="mt-8">
     <p class="text-sm font-black uppercase tracking-[0.2em] text-emerald">Course Studio</p>
     <h1 class="mt-3 text-4xl font-black text-ink">Create a course</h1>
@@ -20,7 +20,7 @@
       </div>
     {% endfor %}
     <div class="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between">
-      <div class="flex flex-wrap gap-4"><a class="text-sm font-bold text-slate-500 hover:text-ink" href="{% url 'dashboard:teacher-dashboard' %}">Cancel</a><a class="text-sm font-bold text-emerald hover:underline" href="{% url 'teacher_courses:generate' %}">Generate with AI instead</a></div>
+      <div class="flex flex-wrap gap-4"><a class="inline-flex items-center gap-1 text-sm font-bold text-slate-500 hover:text-ink" href="{% url 'dashboard:teacher-dashboard' %}">{% include "components/icon.html" with icon="x" icon_class="h-4 w-4" %}Cancel</a><a class="inline-flex items-center gap-1 text-sm font-bold text-emerald hover:underline" href="{% url 'teacher_courses:generate' %}">{% include "components/icon.html" with icon="sparkles" icon_class="h-4 w-4" %}Generate with AI instead</a></div>
       <button class="primary-button" type="submit">{% include "components/icon.html" with icon="plus" icon_class="h-4 w-4" %}Create course and start drafting</button>
     </div>
   </form>

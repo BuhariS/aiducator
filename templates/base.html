@@ -27,7 +27,7 @@
             </form>
           {% else %}
             <a class="rounded-lg px-3 py-2 text-slate-600 transition hover:bg-slate-50 hover:text-ink" href="{% url 'accounts:login' %}">Sign in</a>
-            <a class="primary-button" href="{% url 'accounts:signup' %}">Get started</a>
+            <a class="primary-button" href="{% url 'accounts:signup' %}">{% include "components/icon.html" with icon="plus" icon_class="h-4 w-4" %}Get started</a>
           {% endif %}
         </nav>
       </div>

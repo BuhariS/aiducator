@@ -8,11 +8,11 @@
     <p class="mt-2 text-slate-500">Choose the learning experience that fits your role.</p>
     <div class="mt-6 grid gap-3 sm:grid-cols-2">
       <a class="rounded-2xl border border-emerald bg-emerald/5 p-4 transition hover:bg-emerald/10" href="{% url 'accounts:signup-student' %}">
-        <span class="text-sm font-black text-emerald">Student</span>
+        <span class="inline-flex items-center gap-2 text-sm font-black text-emerald">{% include "components/icon.html" with icon="user" icon_class="h-4 w-4" %}Student</span>
         <span class="mt-1 block text-sm text-slate-500">Learn Python and track your progress.</span>
       </a>
       <a class="rounded-2xl border border-slate-200 p-4 transition hover:border-emerald hover:bg-emerald/5" href="{% url 'accounts:signup-teacher' %}">
-        <span class="text-sm font-black text-ink">Teacher</span>
+        <span class="inline-flex items-center gap-2 text-sm font-black text-ink">{% include "components/icon.html" with icon="edit" icon_class="h-4 w-4" %}Teacher</span>
         <span class="mt-1 block text-sm text-slate-500">Build courses and review student work.</span>
       </a>
     </div>
@@ -26,7 +26,7 @@
           {% for error in field.errors %}<p class="mt-1 text-sm text-red-600">{{ error }}</p>{% endfor %}
         </div>
       {% endfor %}
-      <button class="primary-button w-full" type="submit">Create account</button>
+      <button class="primary-button w-full" type="submit">{% include "components/icon.html" with icon="plus" icon_class="h-4 w-4" %}Create account</button>
     </form>
   </div>
 </section>
