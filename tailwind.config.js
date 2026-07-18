@@ -14,10 +14,6 @@ module.exports = {
       },
       boxShadow: {
         card: "0 12px 35px rgba(20, 33, 61, 0.08)"
-      },
-      fontFamily: {
-        heading: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
-        body: ["Merriweather", "ui-serif", "Georgia", "serif"]
       }
     }
   },
