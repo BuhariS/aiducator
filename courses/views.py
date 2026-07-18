@@ -11,7 +11,7 @@ from django.conf import settings
 from accounts.access import user_has_admin_access, user_has_teacher_access, user_is_student, user_is_teacher
 from ai_engine.models import AIJob, CourseGenerationRequest
 from assessments.forms import QuestionForm, RubricForm
-from assessments.models import Attempt, Question, ReviewQueueItem, RubricVersion
+from assessments.models import Appeal, Attempt, Question, ReviewQueueItem, RubricVersion
 from enrollments.models import Enrollment, LessonProgress
 from enrollments.services import mark_lesson_complete
 from organizations.models import Membership
@@ -131,7 +131,15 @@ def teacher_dashboard(request):
         return HttpResponseForbidden("You do not have access to the teacher dashboard.")
     courses = Course.objects.filter(created_by=request.user).select_related("organization").order_by("-updated_at")
     review_count = ReviewQueueItem.objects.filter(status=ReviewQueueItem.Status.OPEN, assigned_to=request.user).count()
-    return render(request, "courses/teacher_dashboard.html", {"courses": courses, "review_count": review_count})
+    appeal_count = Appeal.objects.filter(
+        attempt__question__lesson_version__module__course_version__course__created_by=request.user,
+        status=Appeal.Status.PENDING,
+    ).count()
+    return render(
+        request,
+        "courses/teacher_dashboard.html",
+        {"courses": courses, "review_count": review_count, "appeal_count": appeal_count},
+    )
 
 
 @login_required

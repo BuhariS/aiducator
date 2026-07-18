@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Appeal assessment · AIDUCATOR{% endblock %}
+{% block content %}
+<section class="mx-auto max-w-2xl px-4 py-12 sm:px-6">
+  <a class="text-sm font-bold text-emerald hover:underline" href="{% url 'assessments:attempt-status' attempt.id %}">← Back to result</a>
+  <div class="mt-8"><p class="text-sm font-black uppercase tracking-wider text-emerald">Assessment appeal</p><h1 class="mt-2 text-4xl font-black text-ink">Ask your teacher to review this result</h1><p class="mt-3 text-slate-500">Explain clearly what you believe was missed. Your teacher makes the final decision.</p></div>
+  <form method="post" class="surface-card mt-8 space-y-6 p-6 sm:p-8">{% csrf_token %}<div><label class="mb-2 block text-sm font-bold text-slate-700" for="id_reason">Why should this grade be reviewed?</label>{{ form.reason }}{% for error in form.reason.errors %}<p class="mt-2 text-sm font-bold text-red-600">{{ error }}</p>{% endfor %}</div><button class="primary-button" type="submit">Submit appeal</button></form>
+</section>
+<style>textarea { width: 100%; border-radius: 0.75rem; border: 1px solid rgb(226 232 240); padding: 0.75rem 1rem; outline: none; }</style>
+{% endblock %}

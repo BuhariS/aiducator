@@ -4,16 +4,17 @@ from .base import CourseGenerationInput, ProviderCourseGeneration, ProviderGrade
 
 
 class FakeGradingProvider:
-    def grade(self, *, question: str, answer: str, rubric: list[dict]) -> ProviderGrade:
+    def grade(self, *, question: str, answer: str, rubric: list[dict], execution_context=None) -> ProviderGrade:
         score = 80 if len(answer.split()) >= 8 else 60
         result = GradingResult(
-            suggested_score=score,
+            score=score,
             confidence=0.9,
             strengths=["The answer attempts the requested concept."],
-            mistakes=[] if score >= 70 else ["Add more explanation and a concrete Python example."],
+            errors=[] if score >= 70 else ["Add more explanation and a concrete Python example."],
             feedback="Your response has been reviewed against the lesson rubric.",
             remediation="Review the lesson example and explain the idea with a small program." if score < 70 else "",
-            teacher_review_required=True,
+            recommended_action="advance" if score >= 70 else "remediate",
+            requires_review=True,
         )
         return ProviderGrade(result=result, provider="fake", model="local", response_id="fake-response")
 

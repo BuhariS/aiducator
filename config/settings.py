@@ -172,6 +172,7 @@ AI_PROMPT_VERSION = os.environ.get("AI_PROMPT_VERSION", "grading-v1")
 AI_COURSE_PROMPT_VERSION = os.environ.get("AI_COURSE_PROMPT_VERSION", "course-generation-v1")
 AI_INPUT_COST_PER_1K = os.environ.get("AI_INPUT_COST_PER_1K", "0")
 AI_OUTPUT_COST_PER_1K = os.environ.get("AI_OUTPUT_COST_PER_1K", "0")
+AI_AUTO_CONFIRM_MIN_CONFIDENCE = float(os.environ.get("AI_AUTO_CONFIRM_MIN_CONFIDENCE", "0.95"))
 
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
 LOGGING = {

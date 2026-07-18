@@ -1,6 +1,6 @@
 from django import forms
 
-from .models import AccommodationRequest, Attempt, Question
+from .models import AccommodationRequest, Appeal, Attempt, Question
 
 
 class AttemptForm(forms.ModelForm):
@@ -47,7 +47,7 @@ class GradeDecisionForm(forms.Form):
 class QuestionForm(forms.ModelForm):
     class Meta:
         model = Question
-        fields = ("question_type", "prompt", "max_score", "position", "is_active")
+        fields = ("question_type", "prompt", "max_score", "position", "is_active", "is_objective")
         widgets = {
             "prompt": forms.Textarea(attrs={"rows": 5, "placeholder": "Write the assessment prompt..."}),
             "max_score": forms.NumberInput(attrs={"min": 1, "max": 100}),
@@ -86,3 +86,23 @@ class AccommodationRequestForm(forms.ModelForm):
             if student
             else self.fields["course"].queryset.none()
         )
+
+
+class AppealForm(forms.ModelForm):
+    class Meta:
+        model = Appeal
+        fields = ("reason",)
+        widgets = {
+            "reason": forms.Textarea(
+                attrs={
+                    "rows": 6,
+                    "placeholder": "Explain why you believe the confirmed grade should be reviewed...",
+                }
+            )
+        }
+
+    def clean_reason(self):
+        reason = self.cleaned_data["reason"].strip()
+        if len(reason) < 10:
+            raise forms.ValidationError("Please explain your appeal in at least 10 characters.")
+        return reason

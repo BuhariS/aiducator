@@ -6,7 +6,9 @@ from django.db import transaction
 from django.conf import settings
 from django.utils import timezone
 
-from assessments.models import AIGrade, Attempt, ReviewQueueItem, RubricVersion
+from assessments.models import AIGrade, Attempt, GradeEvent, RubricVersion, Submission
+from assessments.sandbox import execution_context_for_submission
+from assessments.services import confirm_attempt_grade, queue_manual_review, record_grade_event, should_auto_confirm
 
 from .course_generation import persist_generation_result
 from .models import AIJob, AIUsageEvent, CourseGenerationRequest
@@ -40,6 +42,13 @@ def grade_attempt(self, job_id):
     attempt = Attempt.objects.select_related(
         "question__lesson_version__module__course_version__course",
     ).get(id=job.entity_id)
+    submission = Submission.objects.filter(attempt=attempt).first()
+    execution_context = {}
+    if submission:
+        execution_context = execution_context_for_submission(
+            submission,
+            attempt.question.question_type,
+        )
     rubric = (
         RubricVersion.objects.filter(question=attempt.question, approved_by__isnull=False)
         .order_by("-version_number")
@@ -54,28 +63,39 @@ def grade_attempt(self, job_id):
             question=attempt.question.prompt,
             answer=attempt.answer_text,
             rubric=rubric.criteria,
+            execution_context=execution_context,
         )
     except ProviderError as exc:
         _record_failure(job, attempt, str(exc))
         raise
 
     result = provider_grade.result
+    if execution_context.get("status") in {"unavailable", "failed"}:
+        result.requires_review = True
+        result.recommended_action = "review"
     estimated_cost = _estimate_cost(provider_grade.input_tokens, provider_grade.output_tokens)
     with transaction.atomic():
         AIGrade.objects.update_or_create(
             attempt=attempt,
             defaults={
-                "suggested_score": result.suggested_score,
+                "score": result.score,
+                "suggested_score": result.score,
                 "confidence": result.confidence,
                 "strengths": result.strengths,
-                "mistakes": result.mistakes,
+                "errors": result.errors,
+                "mistakes": result.errors,
                 "feedback": result.feedback,
                 "remediation": result.remediation,
-                "teacher_review_required": True,
+                "recommended_action": result.recommended_action,
+                "requires_review": result.requires_review,
+                "teacher_review_required": result.requires_review,
                 "provider": provider_grade.provider,
                 "model": provider_grade.model,
                 "prompt_version": settings.AI_PROMPT_VERSION,
-                "raw_response": {"response_id": provider_grade.response_id},
+                "raw_response": {
+                    "response_id": provider_grade.response_id,
+                    "payload": result.model_dump(mode="json"),
+                },
             },
         )
         AIUsageEvent.objects.create(
@@ -92,15 +112,31 @@ def grade_attempt(self, job_id):
         attempt.status = Attempt.Status.AWAITING_REVIEW
         attempt.evaluated_at = timezone.now()
         attempt.save(update_fields=["status", "evaluated_at"])
-        ReviewQueueItem.objects.update_or_create(
-            attempt=attempt,
-            defaults={
-                "reason": "AI grading ready for teacher review",
-                "status": ReviewQueueItem.Status.OPEN,
-                "assigned_to": attempt.question.lesson_version.module.course_version.course.created_by,
-                "resolved_at": None,
+        record_grade_event(
+            attempt,
+            GradeEvent.EventType.AI_GRADED,
+            score=result.score,
+            metadata={
+                "confidence": result.confidence,
+                "recommended_action": result.recommended_action,
+                "requires_review": result.requires_review,
             },
         )
+        if should_auto_confirm(attempt, result):
+            confirm_attempt_grade(
+                attempt,
+                result.score,
+                automatic=True,
+                reason="Auto-confirmed by configured high-confidence objective-answer rule.",
+            )
+        else:
+            queue_manual_review(
+                attempt,
+                "AI grading ready for teacher review"
+                if result.requires_review
+                else "AI result requires teacher confirmation",
+                assigned_to=attempt.question.lesson_version.module.course_version.course.created_by,
+            )
         job.status = AIJob.Status.SUCCEEDED
         job.progress = 100
         job.provider = provider_grade.provider
@@ -126,13 +162,10 @@ def _record_failure(job, attempt, message):
         job.save(update_fields=["status", "error_message", "completed_at"])
         attempt.status = Attempt.Status.AWAITING_REVIEW
         attempt.save(update_fields=["status"])
-        ReviewQueueItem.objects.update_or_create(
-            attempt=attempt,
-            defaults={
-                "reason": "AI grading failed; manual review required",
-                "status": ReviewQueueItem.Status.OPEN,
-                "assigned_to": attempt.question.lesson_version.module.course_version.course.created_by,
-            },
+        queue_manual_review(
+            attempt,
+            "AI grading failed; manual review required",
+            assigned_to=attempt.question.lesson_version.module.course_version.course.created_by,
         )
 
 

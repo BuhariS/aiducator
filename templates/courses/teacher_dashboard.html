@@ -6,9 +6,10 @@
     <div><p class="text-sm font-bold uppercase tracking-[0.2em] text-emerald">Teacher workspace</p><h1 class="mt-3 text-4xl font-black text-ink">Make every lesson count.</h1><p class="mt-3 max-w-2xl text-slate-500">Prepare courses, review AI-assisted feedback, and see where your learners need support.</p></div>
     <div class="flex flex-wrap gap-3"><a class="rounded-xl border border-emerald px-4 py-2 text-sm font-bold text-emerald transition hover:bg-emerald/5" href="{% url 'teacher_courses:generate' %}">Generate with AI</a><a class="primary-button" href="{% url 'teacher_courses:create' %}">Create a course manually</a></div>
   </div>
-  <div class="mt-10 grid gap-6 md:grid-cols-3">
+  <div class="mt-10 grid gap-6 md:grid-cols-4">
     <div class="surface-card p-6"><p class="text-sm font-bold text-slate-500">Your courses</p><p class="mt-3 text-4xl font-black text-ink">{{ courses|length }}</p></div>
     <a href="{% url 'assessments:review-queue' %}" class="surface-card p-6 transition hover:-translate-y-1"><p class="text-sm font-bold text-slate-500">Reviews waiting</p><p class="mt-3 text-4xl font-black text-ink">{{ review_count }}</p><p class="mt-2 text-sm font-bold text-emerald">Open review queue →</p></a>
+    <a href="{% url 'assessments:appeal-queue' %}" class="surface-card p-6 transition hover:-translate-y-1"><p class="text-sm font-bold text-slate-500">Appeals waiting</p><p class="mt-3 text-4xl font-black text-ink">{{ appeal_count }}</p><p class="mt-2 text-sm font-bold text-emerald">Review appeals →</p></a>
     <div class="surface-card p-6"><p class="text-sm font-bold text-slate-500">Teacher focus</p><p class="mt-3 font-black text-emerald">Support progress</p></div>
   </div>
   <div class="mt-6 flex flex-wrap gap-3"><a class="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-ink transition hover:border-emerald hover:text-emerald" href="{% url 'assessments:accommodation-queue' %}">Review accessibility requests</a><a class="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-ink transition hover:border-emerald hover:text-emerald" href="{% url 'courses:catalog' %}">View published courses</a></div>

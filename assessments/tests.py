@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from django.test import TestCase, override_settings
 from django.core.exceptions import PermissionDenied
 from django.utils import timezone
@@ -5,11 +7,23 @@ from django.urls import reverse
 
 from accounts.models import User
 from ai_engine.models import AIJob
+from ai_engine.providers.base import ProviderGrade
+from ai_engine.schemas import GradingResult
 from courses.models import Course, CourseVersion, LessonVersion, Module
 from enrollments.models import Enrollment
 from organizations.models import Membership, Organization
 
-from .models import AccommodationRequest, Attempt, GradeDecision, Question, ReviewQueueItem, RubricVersion
+from .models import (
+    AccommodationRequest,
+    Appeal,
+    Attempt,
+    GradeDecision,
+    GradeEvent,
+    ManualReview,
+    Question,
+    ReviewQueueItem,
+    RubricVersion,
+)
 from .views import finalize_review
 
 
@@ -55,6 +69,9 @@ class AttemptFlowTests(TestCase):
         self.assertEqual(AIJob.objects.filter(entity_id=attempt.id).count(), 1)
         self.assertEqual(attempt.status, Attempt.Status.AWAITING_REVIEW)
         self.assertEqual(ReviewQueueItem.objects.filter(attempt=attempt, status=ReviewQueueItem.Status.OPEN).count(), 1)
+        self.assertEqual(len(attempt.submission.content_hash), 64)
+        self.assertTrue(GradeEvent.objects.filter(attempt=attempt, event_type=GradeEvent.EventType.SUBMITTED).exists())
+        self.assertTrue(ManualReview.objects.filter(attempt=attempt, status=ManualReview.Status.OPEN).exists())
 
     def test_student_sees_tentative_ai_grade_with_moderation_notice(self):
         self.client.force_login(self.student)
@@ -90,6 +107,65 @@ class AttemptFlowTests(TestCase):
         self.assertEqual(GradeDecision.objects.get(attempt=review.attempt).final_score, 85)
         self.assertEqual(review.__class__.objects.get(id=review.id).status, ReviewQueueItem.Status.RESOLVED)
         self.assertEqual(self.enrollment.lesson_progress.get().status, "completed")
+
+    def test_high_confidence_objective_result_is_auto_confirmed(self):
+        Question.objects.filter(pk=self.question.pk).update(is_objective=True)
+        provider_grade = ProviderGrade(
+            result=GradingResult(
+                score=90,
+                confidence=0.99,
+                strengths=["Accurate"],
+                errors=[],
+                feedback="Correct.",
+                recommended_action="advance",
+                requires_review=False,
+            ),
+            provider="test",
+            model="test-model",
+        )
+        self.client.force_login(self.student)
+        with patch("ai_engine.tasks.get_grading_provider") as get_provider:
+            get_provider.return_value.grade.return_value = provider_grade
+            with self.captureOnCommitCallbacks(execute=True):
+                self.client.post(
+                    reverse("assessments:submit", kwargs={"question_id": self.question.id}),
+                    {"answer_text": "A variable stores a value for later use."},
+                )
+        attempt = Attempt.objects.get()
+        self.assertEqual(attempt.status, Attempt.Status.GRADED)
+        self.assertEqual(attempt.grade_decision.final_score, 90)
+        self.assertFalse(ReviewQueueItem.objects.filter(attempt=attempt).exists())
+        self.assertTrue(GradeEvent.objects.filter(attempt=attempt, event_type=GradeEvent.EventType.AUTO_CONFIRMED).exists())
+
+    def test_student_can_appeal_and_approved_appeal_reopens_review(self):
+        self.client.force_login(self.student)
+        with self.captureOnCommitCallbacks(execute=True):
+            self.client.post(
+                reverse("assessments:submit", kwargs={"question_id": self.question.id}),
+                {"answer_text": "A variable stores a value and can be reused in a program."},
+            )
+        review = ReviewQueueItem.objects.get()
+        self.client.force_login(self.teacher)
+        self.client.post(
+            reverse("assessments:review-detail", kwargs={"review_id": review.id}),
+            {"final_score": 75, "reason": "Reviewed against the rubric."},
+        )
+        attempt = review.attempt
+        self.client.force_login(self.student)
+        response = self.client.post(
+            reverse("assessments:submit-appeal", kwargs={"attempt_id": attempt.id}),
+            {"reason": "The rubric evidence in my answer was not considered."},
+        )
+        self.assertRedirects(response, reverse("assessments:attempt-status", kwargs={"attempt_id": attempt.id}))
+        appeal = Appeal.objects.get(attempt=attempt)
+        self.client.force_login(self.teacher)
+        response = self.client.post(
+            reverse("assessments:decide-appeal", kwargs={"appeal_id": appeal.id}),
+            {"decision": Appeal.Status.APPROVED, "decision_note": "Reopen for a second review."},
+        )
+        self.assertRedirects(response, reverse("assessments:appeal-queue"))
+        self.assertEqual(Appeal.objects.get(pk=appeal.pk).status, Appeal.Status.APPROVED)
+        self.assertEqual(ManualReview.objects.get(attempt=attempt).status, ManualReview.Status.OPEN)
 
     def test_fourth_attempt_is_rejected(self):
         Attempt.objects.bulk_create(

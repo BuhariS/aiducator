@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 
 GENERATED_ARTIFACT_TYPES = Literal[
@@ -44,13 +44,28 @@ def _reject_unsafe_payload(value):
 
 
 class GradingResult(BaseModel):
-    suggested_score: int = Field(ge=0, le=100)
+    model_config = ConfigDict(populate_by_name=True)
+
+    score: int = Field(ge=0, le=100, validation_alias=AliasChoices("score", "suggested_score"))
     confidence: float = Field(ge=0, le=1)
     strengths: list[str] = Field(default_factory=list)
-    mistakes: list[str] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
     feedback: str
     remediation: str = ""
-    teacher_review_required: bool = True
+    recommended_action: Literal["advance", "remediate", "review"] = "review"
+    requires_review: bool = True
+
+    @property
+    def suggested_score(self):
+        return self.score
+
+    @property
+    def mistakes(self):
+        return self.errors
+
+    @property
+    def teacher_review_required(self):
+        return self.requires_review
 
 
 class GeneratedArtifact(BaseModel):

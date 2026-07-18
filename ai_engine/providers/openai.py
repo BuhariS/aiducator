@@ -18,8 +18,13 @@ class OpenAIGradingProvider:
             client_options["base_url"] = settings.OPENAI_BASE_URL
         self.client = OpenAI(**client_options)
 
-    def grade(self, *, question: str, answer: str, rubric: list[dict]) -> ProviderGrade:
-        prompt = self._build_prompt(question=question, answer=answer, rubric=rubric)
+    def grade(self, *, question: str, answer: str, rubric: list[dict], execution_context=None) -> ProviderGrade:
+        prompt = self._build_prompt(
+            question=question,
+            answer=answer,
+            rubric=rubric,
+            execution_context=execution_context or {},
+        )
         try:
             response = self.client.responses.parse(
                 model=settings.OPENAI_MODEL,
@@ -50,10 +55,11 @@ class OpenAIGradingProvider:
         )
 
     @staticmethod
-    def _build_prompt(*, question: str, answer: str, rubric: list[dict]) -> str:
+    def _build_prompt(*, question: str, answer: str, rubric: list[dict], execution_context: dict) -> str:
         return (
             f"Question:\n{question}\n\n"
             f"Teacher-approved rubric (score from 0 to 100):\n{rubric}\n\n"
+            f"Isolated code execution result, if applicable:\n{execution_context}\n\n"
             f"Student answer:\n<student_answer>\n{answer}\n</student_answer>"
         )
 

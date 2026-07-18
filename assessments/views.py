@@ -11,16 +11,22 @@ from django.utils import timezone
 from ai_engine.models import AIJob
 from ai_engine.tasks import grade_attempt
 from accounts.access import user_has_teacher_access, user_is_teacher
-from analytics.models import LearningEvent
-from gamification.models import XPEvent
-from enrollments.models import Enrollment, LessonProgress
-from enrollments.services import refresh_course_completion
+from enrollments.models import Enrollment
 from notifications.models import Notification
 from organizations.models import Membership
 
 from .access import has_copy_paste_accommodation
-from .forms import AccommodationRequestForm, AttemptForm, GradeDecisionForm
-from .models import AccommodationRequest, Attempt, GradeDecision, Question, ReviewQueueItem
+from .forms import AccommodationRequestForm, AppealForm, AttemptForm, GradeDecisionForm
+from .models import (
+    AccommodationRequest,
+    Appeal,
+    Attempt,
+    GradeEvent,
+    Question,
+    ReviewQueueItem,
+    Submission,
+)
+from .services import confirm_attempt_grade, queue_manual_review, record_grade_event
 
 
 @login_required
@@ -44,12 +50,25 @@ def submit_attempt(request, question_id):
     form = AttemptForm(request.POST or None, allow_copy_paste=allow_copy_paste)
     if request.method == "POST" and form.is_valid():
         with transaction.atomic():
+            locked_enrollment = Enrollment.objects.select_for_update().get(pk=enrollment.pk)
+            attempts_used = Attempt.objects.filter(
+                enrollment=locked_enrollment,
+                question=question,
+            ).count()
+            if attempts_used >= 3:
+                return render(request, "assessments/attempt_locked.html", {"question": question}, status=400)
             attempt = form.save(commit=False)
-            attempt.enrollment = enrollment
+            attempt.enrollment = locked_enrollment
             attempt.question = question
             attempt.attempt_number = attempts_used + 1
             attempt.status = Attempt.Status.SUBMITTED
             attempt.save()
+            Submission.objects.create(
+                attempt=attempt,
+                answer_text=attempt.answer_text,
+                code_language="python" if question.question_type in {"code_writing", "debugging", "error_identification"} else "",
+            )
+            record_grade_event(attempt, GradeEvent.EventType.SUBMITTED, actor=request.user)
             job = AIJob.objects.create(
                 job_type=AIJob.JobType.GRADING,
                 entity_type="attempt",
@@ -132,8 +151,14 @@ def decide_accommodation(request, request_id):
 
 @login_required
 def attempt_status(request, attempt_id):
-    attempt = get_object_or_404(Attempt.objects.select_related("question", "enrollment__course"), id=attempt_id, enrollment__student=request.user)
+    attempt = get_object_or_404(
+        Attempt.objects.select_related("question", "enrollment__course"),
+        id=attempt_id,
+        enrollment__student=request.user,
+    )
     job = AIJob.objects.filter(entity_type="attempt", entity_id=attempt.id).order_by("-created_at").first()
+    grade_decision = getattr(attempt, "grade_decision", None)
+    attempts_used = Attempt.objects.filter(enrollment=attempt.enrollment, question=attempt.question).count()
     return render(
         request,
         "assessments/status.html",
@@ -141,7 +166,12 @@ def attempt_status(request, attempt_id):
             "attempt": attempt,
             "job": job,
             "ai_grade": getattr(attempt, "ai_grade", None),
-            "grade_decision": getattr(attempt, "grade_decision", None),
+            "grade_decision": grade_decision,
+            "can_retry": bool(
+                grade_decision
+                and grade_decision.final_score < attempt.enrollment.course.passing_score
+                and attempts_used < attempt.enrollment.course.max_retries + 1
+            ),
         },
     )
 
@@ -214,7 +244,10 @@ def review_detail(request, review_id):
         return error
     attempt = item.attempt
     ai_grade = getattr(attempt, "ai_grade", None)
-    form = GradeDecisionForm(request.POST or None, initial={"final_score": getattr(ai_grade, "suggested_score", 0)})
+    form = GradeDecisionForm(
+        request.POST or None,
+        initial={"final_score": getattr(ai_grade, "suggested_score", 0)},
+    )
     if request.method == "POST" and form.is_valid():
         finalize_review(item, request.user, form.cleaned_data["final_score"], form.cleaned_data["reason"])
         return redirect("assessments:review-queue")
@@ -223,70 +256,115 @@ def review_detail(request, review_id):
 
 @transaction.atomic
 def finalize_review(item, teacher, final_score, reason=""):
-    attempt = item.attempt
-    course = attempt.question.lesson_version.module.course_version.course
-    if not user_has_teacher_access(teacher, course.organization):
-        raise PermissionDenied("You do not have permission to finalize this review.")
     if item.status != ReviewQueueItem.Status.OPEN:
         raise PermissionDenied("This review has already been resolved.")
-    if not 0 <= final_score <= 100:
-        raise ValueError("Final score must be between 0 and 100.")
-    passed = final_score >= course.passing_score
-    attempts_used = Attempt.objects.filter(enrollment=attempt.enrollment, question=attempt.question).count()
-    progress, _ = LessonProgress.objects.get_or_create(
-        enrollment=attempt.enrollment,
-        lesson_version=attempt.question.lesson_version,
-    )
-    previous_best = progress.best_score or 0
-    progress.best_score = max(previous_best, final_score)
-    progress.attempts_used = attempts_used
-    if passed:
-        progress.status = LessonProgress.Status.COMPLETED
-        progress.completed_at = progress.completed_at or timezone.now()
-    elif attempts_used >= course.max_retries + 1:
-        progress.status = LessonProgress.Status.NEEDS_SUPPORT
-    else:
-        progress.status = LessonProgress.Status.IN_PROGRESS
-    progress.save(update_fields=["best_score", "attempts_used", "status", "completed_at"])
-    refresh_course_completion(attempt.enrollment, actor=teacher)
+    return confirm_attempt_grade(item.attempt, final_score, actor=teacher, reason=reason)
 
-    GradeDecision.objects.update_or_create(
-        attempt=attempt,
-        defaults={
-            "final_score": final_score,
-            "status": GradeDecision.Status.CONFIRMED if getattr(attempt, "ai_grade", None) and final_score == attempt.ai_grade.suggested_score else GradeDecision.Status.OVERRIDDEN,
-            "decided_by": teacher,
-            "reason": reason,
-        },
-    )
-    attempt.status = Attempt.Status.GRADED if passed else Attempt.Status.NEEDS_SUPPORT if attempts_used >= 3 else Attempt.Status.REMEDIATION
-    attempt.save(update_fields=["status"])
-    item.status = ReviewQueueItem.Status.RESOLVED
-    item.assigned_to = teacher
-    item.resolved_at = timezone.now()
-    item.save(update_fields=["status", "assigned_to", "resolved_at"])
-    if getattr(attempt, "ai_grade", None):
-        attempt.ai_grade.teacher_review_required = False
-        attempt.ai_grade.save(update_fields=["teacher_review_required"])
 
-    Notification.objects.create(
-        recipient=attempt.enrollment.student,
-        notification_type="grade_confirmed",
-        title="Your Python assessment was reviewed",
-        body=f"Your teacher confirmed a score of {final_score}% for {attempt.question.lesson_version.title}.",
+@login_required
+@require_http_methods(["GET", "POST"])
+def submit_appeal(request, attempt_id):
+    attempt = get_object_or_404(
+        Attempt.objects.select_related(
+            "enrollment__student",
+            "enrollment__course",
+            "question__lesson_version__module__course_version__course",
+            "grade_decision",
+        ),
+        id=attempt_id,
+        enrollment__student=request.user,
     )
-    LearningEvent.objects.create(
-        actor=attempt.enrollment.student,
-        event_type="assessment_graded",
-        entity_type="attempt",
-        entity_id=attempt.id,
-        metadata={"score": final_score, "passed": passed},
-    )
-    if passed and not XPEvent.objects.filter(student=attempt.enrollment.student, source_id=attempt.id).exists():
-        XPEvent.objects.create(
-            student=attempt.enrollment.student,
-            enrollment=attempt.enrollment,
-            event_type="assessment_passed",
-            points=10,
-            source_id=attempt.id,
+    if not hasattr(attempt, "grade_decision"):
+        raise PermissionDenied("You can appeal only a confirmed grade.")
+    if Appeal.objects.filter(attempt=attempt, status=Appeal.Status.PENDING).exists():
+        return redirect("assessments:attempt-status", attempt_id=attempt.id)
+    form = AppealForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        appeal = form.save(commit=False)
+        appeal.attempt = attempt
+        appeal.student = request.user
+        appeal.save()
+        record_grade_event(attempt, GradeEvent.EventType.APPEALED, actor=request.user, metadata={"appeal_id": str(appeal.id)})
+        Notification.objects.create(
+            recipient=attempt.question.lesson_version.module.course_version.course.created_by,
+            notification_type="assessment_appeal",
+            title="A student appealed a confirmed grade",
+            body=f"Review the appeal for {attempt.question.lesson_version.title}.",
         )
+        return redirect("assessments:attempt-status", attempt_id=attempt.id)
+    return render(request, "assessments/appeal_form.html", {"attempt": attempt, "form": form})
+
+
+@login_required
+def appeal_queue(request):
+    if not user_is_teacher(request.user):
+        from django.http import HttpResponseForbidden
+
+        return HttpResponseForbidden("You do not have access to assessment appeals.")
+    appeals = (
+        Appeal.objects.filter(status=Appeal.Status.PENDING)
+        .filter(
+            Q(attempt__question__lesson_version__module__course_version__course__created_by=request.user)
+            | Q(
+                attempt__question__lesson_version__module__course_version__course__organization__memberships__user=request.user,
+                attempt__question__lesson_version__module__course_version__course__organization__memberships__role__in={
+                    Membership.Role.OWNER,
+                    Membership.Role.ADMIN,
+                    Membership.Role.TEACHER,
+                },
+            )
+        )
+        .select_related("attempt__question__lesson_version", "student", "attempt__grade_decision")
+        .distinct()
+    )
+    return render(request, "assessments/appeal_queue.html", {"appeals": appeals})
+
+
+@login_required
+@require_POST
+def decide_appeal(request, appeal_id):
+    appeal = get_object_or_404(
+        Appeal.objects.select_related(
+            "attempt__question__lesson_version__module__course_version__course",
+            "student",
+        ),
+        id=appeal_id,
+        status=Appeal.Status.PENDING,
+    )
+    course = appeal.attempt.question.lesson_version.module.course_version.course
+    if not user_has_teacher_access(request.user, course.organization):
+        from django.http import HttpResponseForbidden
+
+        return HttpResponseForbidden("You do not have access to this appeal.")
+    decision = request.POST.get("decision")
+    if decision not in {Appeal.Status.APPROVED, Appeal.Status.REJECTED}:
+        return redirect("assessments:appeal-queue")
+    appeal.status = decision
+    appeal.reviewed_by = request.user
+    appeal.decision_note = request.POST.get("decision_note", "").strip()
+    appeal.resolved_at = timezone.now()
+    appeal.save(update_fields=["status", "reviewed_by", "decision_note", "resolved_at"])
+    record_grade_event(
+        appeal.attempt,
+        GradeEvent.EventType.APPEAL_RESOLVED,
+        actor=request.user,
+        metadata={"appeal_id": str(appeal.id), "decision": decision},
+    )
+    if decision == Appeal.Status.APPROVED:
+        appeal.attempt.status = Attempt.Status.AWAITING_REVIEW
+        appeal.attempt.save(update_fields=["status"])
+        grade = getattr(appeal.attempt, "ai_grade", None)
+        if grade:
+            grade.requires_review = True
+            grade.teacher_review_required = True
+            grade.save(update_fields=["requires_review", "teacher_review_required"])
+        queue_manual_review(appeal.attempt, "Student appeal approved; reassessment required", assigned_to=request.user)
+    Notification.objects.create(
+        recipient=appeal.student,
+        notification_type="assessment_appeal",
+        title="Your assessment appeal was reviewed",
+        body="Your teacher approved the appeal and reopened the assessment for review."
+        if decision == Appeal.Status.APPROVED
+        else "Your teacher reviewed your appeal and kept the confirmed grade.",
+    )
+    return redirect("assessments:appeal-queue")

@@ -39,7 +39,14 @@ class ProviderCourseGeneration:
 
 
 class GradingProvider(Protocol):
-    def grade(self, *, question: str, answer: str, rubric: list[dict]) -> ProviderGrade:
+    def grade(
+        self,
+        *,
+        question: str,
+        answer: str,
+        rubric: list[dict],
+        execution_context: dict | None = None,
+    ) -> ProviderGrade:
         ...
 
 
