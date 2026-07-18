@@ -4,22 +4,37 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 
 from assessments.models import Question, RubricVersion
-from courses.models import CourseVersion, FinalProject, LessonArtifact, LessonVersion, Module, Translation
+from courses.models import (
+    CourseVersion,
+    FinalProject,
+    LessonArtifact,
+    LessonVersion,
+    Module,
+    Translation,
+)
 
 from .models import CourseGenerationRequest
 from .schemas import CourseGenerationResult
+from .security import allowed_embed_url, moderate_payload, sanitize_html
 
 
 def validate_generation_result(result) -> CourseGenerationResult:
     """Revalidate provider output before any generated content is persisted."""
     payload = result.model_dump() if hasattr(result, "model_dump") else result
+    moderate_payload(payload, field_name="Generated course content")
     validated = CourseGenerationResult.model_validate(payload)
     for module in validated.modules:
         for lesson in module.lessons:
+            lesson.content = sanitize_html(lesson.content)
             if len(lesson.content.split()) < 5:
                 raise ValidationError(f"Generated lesson '{lesson.title}' is too short to be useful.")
             if sum(criterion.weight for question in lesson.questions for criterion in question.rubric) <= 0:
                 raise ValidationError(f"Generated lesson '{lesson.title}' has invalid rubric weights.")
+            for artifact in lesson.artifacts:
+                if artifact.artifact_type != "code_example":
+                    artifact.content = sanitize_html(artifact.content)
+                if artifact.artifact_type in {"image", "video_embed", "simulation_link"}:
+                    allowed_embed_url(artifact.content, field_name="Generated media URL")
     return validated
 
 
@@ -64,6 +79,8 @@ def persist_generation_result(request: CourseGenerationRequest, result: CourseGe
                     artifact_type=generated_artifact.artifact_type,
                     content=generated_artifact.content,
                     metadata=deepcopy(generated_artifact.metadata),
+                    ai_generated=True,
+                    teacher_approved=False,
                     position=artifact_position,
                 )
             for question_position, generated_question in enumerate(generated_lesson.questions, start=1):

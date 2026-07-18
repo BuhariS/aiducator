@@ -1,5 +1,7 @@
 from django import forms
 
+from ai_engine.security import MAX_ANSWER_LENGTH, clean_input
+
 from .models import AccommodationRequest, Appeal, Attempt, Question
 
 
@@ -28,12 +30,13 @@ class AttemptForm(forms.ModelForm):
                     "ondrop": "return false;",
                     "oncontextmenu": "return false;",
                     "data-protected-input": "true",
+                    "maxlength": MAX_ANSWER_LENGTH,
                 }
             )
         }
 
     def clean_answer_text(self):
-        answer = self.cleaned_data["answer_text"].strip()
+        answer = clean_input(self.cleaned_data["answer_text"], field_name="Answer", max_length=MAX_ANSWER_LENGTH)
         if len(answer) < 10:
             raise forms.ValidationError("Please provide a complete answer of at least 10 characters.")
         return answer
@@ -41,7 +44,7 @@ class AttemptForm(forms.ModelForm):
 
 class GradeDecisionForm(forms.Form):
     final_score = forms.IntegerField(min_value=0, max_value=100)
-    reason = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows": 4}))
+    reason = forms.CharField(required=False, max_length=2_000, widget=forms.Textarea(attrs={"rows": 4, "maxlength": 2000}))
 
 
 class QuestionForm(forms.ModelForm):
@@ -96,6 +99,7 @@ class AppealForm(forms.ModelForm):
             "reason": forms.Textarea(
                 attrs={
                     "rows": 6,
+                    "maxlength": 2_000,
                     "placeholder": "Explain why you believe the confirmed grade should be reviewed...",
                 }
             )

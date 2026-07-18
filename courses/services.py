@@ -1,13 +1,21 @@
 from copy import deepcopy
 
+from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.db.models import Max
-from django.core.exceptions import PermissionDenied
 
 from accounts.access import user_has_teacher_access
 from assessments.models import Question, RubricVersion
 
-from .models import Course, CourseVersion, FinalProject, LessonArtifact, LessonVersion, Module, Translation
+from .models import (
+    Course,
+    CourseVersion,
+    FinalProject,
+    LessonArtifact,
+    LessonVersion,
+    Module,
+    Translation,
+)
 
 
 @transaction.atomic
@@ -56,6 +64,8 @@ def create_draft_version(
                     asset=source_artifact.asset.name if source_artifact.asset else "",
                     metadata=deepcopy(source_artifact.metadata),
                     is_active=source_artifact.is_active,
+                    ai_generated=source_artifact.ai_generated,
+                    teacher_approved=False if source_artifact.ai_generated else source_artifact.teacher_approved,
                     position=source_artifact.position,
                 )
             for source_translation in source_lesson.translations.all():

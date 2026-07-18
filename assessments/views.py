@@ -6,10 +6,13 @@ from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.http import require_POST
+from django.views.decorators.csrf import csrf_protect
 from django.utils import timezone
 
 from ai_engine.models import AIJob
+from ai_engine.rate_limit import rate_limit
 from ai_engine.tasks import grade_attempt
+from analytics.security import record_audit_event
 from accounts.access import user_has_teacher_access, user_is_teacher
 from enrollments.models import Enrollment
 from notifications.models import Notification
@@ -31,6 +34,8 @@ from .services import confirm_attempt_grade, queue_manual_review, record_grade_e
 
 @login_required
 @require_http_methods(["GET", "POST"])
+@csrf_protect
+@rate_limit("assessment-submission", limit=settings.AI_RATE_LIMIT_ATTEMPT, period=3600)
 def submit_attempt(request, question_id):
     question = get_object_or_404(Question.objects.select_related("lesson_version__module__course_version"), id=question_id, is_active=True)
     enrollment = get_object_or_404(
@@ -74,6 +79,13 @@ def submit_attempt(request, question_id):
                 entity_type="attempt",
                 entity_id=attempt.id,
                 status=AIJob.Status.QUEUED,
+            )
+            record_audit_event(
+                action="assessment_attempt_submitted",
+                actor=request.user,
+                obj=attempt,
+                request=request,
+                metadata={"job_id": str(job.id), "attempt_number": attempt.attempt_number},
             )
             transaction.on_commit(lambda: _enqueue_grading(job.id))
         return redirect("assessments:attempt-status", attempt_id=attempt.id)

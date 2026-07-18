@@ -1,6 +1,9 @@
 import shutil
 import subprocess
 
+from django.conf import settings
+
+from ai_engine.security import clean_input
 
 CODE_QUESTION_TYPES = {"code_writing", "debugging", "error_identification"}
 
@@ -11,6 +14,16 @@ def execute_python_in_isolated_sandbox(source: str) -> dict:
     The web process never executes learner code directly. If Docker or the configured
     Python image is unavailable, grading can continue but the result must be reviewed.
     """
+    try:
+        source = clean_input(
+            source,
+            field_name="Python submission",
+            max_length=settings.SANDBOX_MAX_SOURCE_LENGTH,
+        )
+    except Exception as exc:
+        return {"status": "failed", "message": str(exc)}
+    if "\x00" in source:
+        return {"status": "failed", "message": "The code contains a disallowed null byte."}
     if not shutil.which("docker"):
         return {
             "status": "unavailable",
@@ -38,14 +51,21 @@ def execute_python_in_isolated_sandbox(source: str) -> dict:
         "--read-only",
         "--cap-drop=ALL",
         "--security-opt=no-new-privileges",
-        "--pids-limit=64",
-        "--memory=128m",
-        "--cpus=0.5",
+        "--user=65532:65532",
+        f"--pids-limit={settings.SANDBOX_MAX_PROCESSES}",
+        f"--memory={settings.SANDBOX_MEMORY_LIMIT}",
+        "--memory-swap=128m",
+        f"--cpus={settings.SANDBOX_CPU_LIMIT}",
+        f"--ulimit=cpu={settings.SANDBOX_CPU_SECONDS}:{settings.SANDBOX_CPU_SECONDS}",
+        "--ulimit=fsize=1048576:1048576",
+        "--ulimit=nofile=64:64",
+        "--ipc=none",
         "--tmpfs",
-        "/tmp:rw,noexec,nosuid,size=16m",
-        "python:3.12-alpine",
+        "/tmp:rw,noexec,nosuid,nodev,size=16m",
+        settings.SANDBOX_IMAGE,
         "python",
         "-I",
+        "-B",
         "-c",
         source,
     ]
@@ -54,7 +74,7 @@ def execute_python_in_isolated_sandbox(source: str) -> dict:
             command,
             capture_output=True,
             text=True,
-            timeout=5,
+            timeout=settings.SANDBOX_WALL_TIME_SECONDS,
             check=False,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:

@@ -1,22 +1,37 @@
+from django.conf import settings
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
-from django.http import Http404, HttpResponseForbidden
-from django.contrib import messages
 from django.db import transaction
+from django.http import Http404, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods, require_POST
-from django.conf import settings
 
-from accounts.access import user_has_admin_access, user_has_teacher_access, user_is_student, user_is_teacher
+from accounts.access import (
+    user_has_admin_access,
+    user_has_teacher_access,
+    user_is_student,
+    user_is_teacher,
+)
 from ai_engine.models import AIJob, CourseGenerationRequest
+from ai_engine.rate_limit import rate_limit
+from analytics.security import record_audit_event
 from assessments.forms import QuestionForm, RubricForm
 from assessments.models import Appeal, Attempt, Question, ReviewQueueItem, RubricVersion
 from enrollments.models import Enrollment, LessonProgress
 from enrollments.services import mark_lesson_complete
 from organizations.models import Membership
 
-from .forms import ArtifactForm, CourseForm, CourseGenerationForm, FinalProjectForm, LessonForm, ModuleForm
+from .forms import (
+    ArtifactForm,
+    CourseForm,
+    CourseGenerationForm,
+    FinalProjectForm,
+    LessonForm,
+    ModuleForm,
+)
 from .models import Course, CourseVersion, FinalProject, LessonArtifact, LessonVersion, Module
 from .services import create_draft_version
 
@@ -172,6 +187,8 @@ def create_course(request):
 
 @login_required
 @require_http_methods(["GET", "POST"])
+@csrf_protect
+@rate_limit("course-generation", limit=settings.AI_RATE_LIMIT_COURSE_GENERATION, period=3600)
 def generate_course(request):
     membership = (
         request.user.memberships.filter(
@@ -210,6 +227,13 @@ def generate_course(request):
                 entity_id=generation_request.id,
                 status=AIJob.Status.QUEUED,
                 prompt_version=settings.AI_COURSE_PROMPT_VERSION,
+            )
+            record_audit_event(
+                action="ai_course_generation_requested",
+                actor=request.user,
+                obj=generation_request,
+                request=request,
+                metadata={"job_id": str(job.id), "prompt_version": job.prompt_version},
             )
             transaction.on_commit(lambda: _enqueue_course_generation(job.id))
         messages.success(request, "Course generation started. Review the draft before publishing.")
@@ -460,6 +484,8 @@ def artifact_form(request, slug, version_id, lesson_id, artifact_id=None):
     if request.method == "POST" and form.is_valid():
         saved_artifact = form.save(commit=False)
         saved_artifact.lesson_version = lesson
+        if not saved_artifact.ai_generated:
+            saved_artifact.teacher_approved = True
         saved_artifact.save()
         messages.success(request, "Learning material saved to the draft version.")
         return redirect("teacher_courses:version-editor", slug=course.slug, version_id=version.id)
@@ -556,6 +582,7 @@ def question_form(request, slug, version_id, lesson_id, question_id=None):
 
 @login_required
 @require_POST
+@csrf_protect
 def publish_version(request, slug, version_id):
     course, version, error = _get_editable_version(request, slug, version_id)
     if error:
@@ -583,6 +610,13 @@ def publish_version(request, slug, version_id):
             status=CourseGenerationRequest.Status.PUBLISHED,
             completed_at=now,
         )
+        record_audit_event(
+            action="course_version_published",
+            actor=request.user,
+            obj=version,
+            request=request,
+            metadata={"course_id": str(course.id), "version_number": version.version_number},
+        )
     messages.success(request, f"Version {version.version_number} is now published and immutable.")
     return redirect("teacher_courses:studio", slug=course.slug)
 
@@ -606,4 +640,9 @@ def _version_validation_errors(version, modules=None):
                 rubric = question.rubrics.order_by("-version_number").first()
                 if not rubric or not rubric.criteria:
                     validation_errors.append(f"Assessment '{question.prompt[:60]}' needs a rubric.")
+            for artifact in lesson.artifacts.all():
+                if artifact.ai_generated and not artifact.teacher_approved:
+                    validation_errors.append(
+                        f"AI-generated material '{artifact.get_artifact_type_display()}' in '{lesson.title}' needs teacher approval."
+                    )
     return validation_errors

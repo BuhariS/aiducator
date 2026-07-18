@@ -2,18 +2,28 @@ import logging
 from decimal import Decimal
 
 from celery import shared_task
-from django.db import transaction
 from django.conf import settings
+from django.db import transaction
 from django.utils import timezone
 
 from assessments.models import AIGrade, Attempt, GradeEvent, RubricVersion, Submission
 from assessments.sandbox import execution_context_for_submission
-from assessments.services import confirm_attempt_grade, queue_manual_review, record_grade_event, should_auto_confirm
+from assessments.services import (
+    confirm_attempt_grade,
+    queue_manual_review,
+    record_grade_event,
+    should_auto_confirm,
+)
 
 from .course_generation import persist_generation_result
 from .models import AIJob, AIUsageEvent, CourseGenerationRequest
-from .providers import CourseGenerationInput, ProviderError, get_course_generation_provider, get_grading_provider
-
+from .providers import (
+    CourseGenerationInput,
+    ProviderError,
+    get_course_generation_provider,
+    get_grading_provider,
+)
+from .security import moderate_payload
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +80,7 @@ def grade_attempt(self, job_id):
         raise
 
     result = provider_grade.result
+    moderate_payload(result.model_dump(mode="json"), field_name="AI grading feedback")
     if execution_context.get("status") in {"unavailable", "failed"}:
         result.requires_review = True
         result.recommended_action = "review"

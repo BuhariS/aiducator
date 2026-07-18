@@ -1,12 +1,12 @@
-import uuid
 import hashlib
+import uuid
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 
-from courses.models import LessonVersion
-from courses.models import Course
+from ai_engine.fields import EncryptedTextField
+from courses.models import Course, LessonVersion
 from enrollments.models import Enrollment
 
 
@@ -85,7 +85,7 @@ class Attempt(models.Model):
     enrollment = models.ForeignKey(Enrollment, on_delete=models.PROTECT, related_name="attempts")
     question = models.ForeignKey(Question, on_delete=models.PROTECT, related_name="attempts")
     attempt_number = models.PositiveSmallIntegerField()
-    answer_text = models.TextField()
+    answer_text = EncryptedTextField()
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.SUBMITTED)
     submitted_at = models.DateTimeField(auto_now_add=True)
     evaluated_at = models.DateTimeField(null=True, blank=True)
@@ -125,7 +125,7 @@ class Submission(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     attempt = models.OneToOneField(Attempt, on_delete=models.PROTECT, related_name="submission")
-    answer_text = models.TextField()
+    answer_text = EncryptedTextField()
     content_hash = models.CharField(max_length=64, editable=False)
     code_language = models.CharField(max_length=40, blank=True)
     execution_status = models.CharField(

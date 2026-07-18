@@ -172,6 +172,8 @@ class LessonArtifact(models.Model):
     asset = models.FileField(upload_to="lesson-artifacts/", blank=True)
     metadata = models.JSONField(default=dict, blank=True)
     is_active = models.BooleanField(default=True)
+    ai_generated = models.BooleanField(default=False)
+    teacher_approved = models.BooleanField(default=True)
     position = models.PositiveIntegerField(default=0)
 
     class Meta:

@@ -133,6 +133,17 @@ CELERY_RESULT_SERIALIZER = "json"
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TIMEZONE = TIME_ZONE
 
+REDIS_URL = os.environ.get("REDIS_URL", CELERY_BROKER_URL)
+if DEBUG and not os.environ.get("CACHE_BACKEND"):
+    CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache", "LOCATION": "aiducator-local"}}
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": os.environ.get("CACHE_BACKEND", "django.core.cache.backends.redis.RedisCache"),
+            "LOCATION": REDIS_URL,
+        }
+    }
+
 STORAGE_BACKEND = os.environ.get("STORAGE_BACKEND", "filesystem").lower()
 MEDIA_URL = os.environ.get("MEDIA_URL", "/media/")
 MEDIA_ROOT = BASE_DIR / "media"
@@ -173,6 +184,20 @@ AI_COURSE_PROMPT_VERSION = os.environ.get("AI_COURSE_PROMPT_VERSION", "course-ge
 AI_INPUT_COST_PER_1K = os.environ.get("AI_INPUT_COST_PER_1K", "0")
 AI_OUTPUT_COST_PER_1K = os.environ.get("AI_OUTPUT_COST_PER_1K", "0")
 AI_AUTO_CONFIRM_MIN_CONFIDENCE = float(os.environ.get("AI_AUTO_CONFIRM_MIN_CONFIDENCE", "0.95"))
+AI_FIELD_ENCRYPTION_KEY = os.environ.get("AI_FIELD_ENCRYPTION_KEY", "")
+AI_ALLOWED_EMBED_HOSTS = os.environ.get(
+    "AI_ALLOWED_EMBED_HOSTS",
+    "youtube.com,youtube-nocookie.com,youtu.be,vimeo.com,phet.colorado.edu",
+)
+AI_RATE_LIMIT_COURSE_GENERATION = env_int("AI_RATE_LIMIT_COURSE_GENERATION", 5)
+AI_RATE_LIMIT_ATTEMPT = env_int("AI_RATE_LIMIT_ATTEMPT", 20)
+SANDBOX_IMAGE = os.environ.get("SANDBOX_IMAGE", "python:3.12-alpine")
+SANDBOX_MAX_SOURCE_LENGTH = env_int("SANDBOX_MAX_SOURCE_LENGTH", 12_000)
+SANDBOX_MAX_PROCESSES = env_int("SANDBOX_MAX_PROCESSES", 32)
+SANDBOX_MEMORY_LIMIT = os.environ.get("SANDBOX_MEMORY_LIMIT", "128m")
+SANDBOX_CPU_LIMIT = os.environ.get("SANDBOX_CPU_LIMIT", "0.5")
+SANDBOX_CPU_SECONDS = env_int("SANDBOX_CPU_SECONDS", 2)
+SANDBOX_WALL_TIME_SECONDS = env_int("SANDBOX_WALL_TIME_SECONDS", 5)
 
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
 LOGGING = {

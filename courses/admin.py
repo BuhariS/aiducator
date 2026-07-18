@@ -50,8 +50,8 @@ class LessonAdmin(LessonVersionAdmin):
 
 @admin.register(LessonArtifact)
 class LessonArtifactAdmin(admin.ModelAdmin):
-    list_display = ("lesson_version", "artifact_type", "position", "is_active")
-    list_filter = ("artifact_type", "is_active")
+    list_display = ("lesson_version", "artifact_type", "position", "is_active", "ai_generated", "teacher_approved")
+    list_filter = ("artifact_type", "is_active", "ai_generated", "teacher_approved")
     search_fields = ("lesson_version__title", "content")
     readonly_fields = ("id",)
 

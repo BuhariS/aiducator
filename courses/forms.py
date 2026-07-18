@@ -1,6 +1,9 @@
+from urllib.parse import urlparse
+
 from django import forms
 from django.utils.text import slugify
-from urllib.parse import urlparse
+
+from ai_engine.security import allowed_embed_url, clean_input, reject_prompt_injection
 
 from .models import Course, FinalProject, LessonArtifact, LessonVersion, Module
 
@@ -45,6 +48,7 @@ class CourseGenerationForm(forms.Form):
     )
     objective = forms.CharField(
         required=False,
+        max_length=2_000,
         label="Learning objective",
         help_text="State what learners should know and apply. A free prompt can provide this instead.",
         widget=forms.Textarea(attrs={"rows": 4, "placeholder": "Learners will know and apply Python fundamentals..."}),
@@ -64,6 +68,7 @@ class CourseGenerationForm(forms.Form):
     )
     free_prompt = forms.CharField(
         required=False,
+        max_length=4_000,
         label="Additional teacher prompt",
         help_text="Use this for creative direction, local examples, pacing, or a fully free-form request.",
         widget=forms.Textarea(attrs={"rows": 7, "placeholder": "Create practical lessons using Nigerian classroom examples..."}),
@@ -85,6 +90,14 @@ class CourseGenerationForm(forms.Form):
             raise forms.ValidationError("Request no more than 12 translation languages.")
         return languages
 
+    def clean_objective(self):
+        objective = clean_input(self.cleaned_data.get("objective", ""), field_name="Learning objective", max_length=2_000)
+        return reject_prompt_injection(objective, field_name="Learning objective")
+
+    def clean_free_prompt(self):
+        prompt = clean_input(self.cleaned_data.get("free_prompt", ""), field_name="Additional teacher prompt", max_length=4_000)
+        return reject_prompt_injection(prompt, field_name="Additional teacher prompt")
+
     def clean(self):
         cleaned_data = super().clean()
         if not cleaned_data.get("objective", "").strip() and not cleaned_data.get("free_prompt", "").strip():
@@ -105,7 +118,7 @@ class ModuleForm(forms.ModelForm):
 class ArtifactForm(forms.ModelForm):
     class Meta:
         model = LessonArtifact
-        fields = ("artifact_type", "content", "asset", "position", "is_active")
+        fields = ("artifact_type", "content", "asset", "position", "is_active", "teacher_approved")
         widgets = {
             "content": forms.Textarea(
                 attrs={"rows": 6, "placeholder": "Add text, a URL, or embed reference..."}
@@ -138,6 +151,17 @@ class ArtifactForm(forms.ModelForm):
             LessonArtifact.ArtifactType.SIMULATION,
         } and urlparse(content).scheme not in {"http", "https"}:
             self.add_error("content", "Resource links must use http:// or https://.")
+        if content and artifact_type in {
+            LessonArtifact.ArtifactType.IMAGE,
+            LessonArtifact.ArtifactType.VIDEO,
+            LessonArtifact.ArtifactType.SIMULATION,
+        }:
+            try:
+                cleaned_data["content"] = allowed_embed_url(content, field_name="Learning resource URL")
+            except Exception as exc:
+                self.add_error("content", str(exc))
+        if content:
+            cleaned_data["content"] = clean_input(content, field_name="Learning material", max_length=12_000)
         return cleaned_data
 
     def __init__(self, *args, **kwargs):
@@ -158,7 +182,7 @@ class LessonForm(forms.ModelForm):
         widgets = {
             "title": forms.TextInput(attrs={"placeholder": "Lesson title"}),
             "position": forms.NumberInput(attrs={"min": 1}),
-            "content": forms.Textarea(attrs={"rows": 14, "placeholder": "Write the lesson explanation..."}),
+            "content": forms.Textarea(attrs={"rows": 14, "maxlength": 20000, "placeholder": "Write the lesson explanation..."}),
         }
 
     def __init__(self, *args, **kwargs):
