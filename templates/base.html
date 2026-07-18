@@ -46,15 +46,15 @@
       <div class="mx-auto grid max-w-7xl gap-10 px-4 py-12 sm:px-6 md:grid-cols-[1.5fr_1fr_1fr] lg:px-8">
         <div>
           <a aria-label="Aiducator home" href="{% url 'courses:catalog' %}" class="inline-flex items-center gap-3">
-            <span class="brand-mark">A</span>
-            <span class="brand-word text-white">Aidu<span class="brand-word-accent">cator</span></span>
+            <span class="grid h-10 w-10 place-items-center rounded-xl bg-sunshine text-lg font-black text-ink">A</span>
+            <span class="brand-word text-white">Aidu<span class="brand-word-accent text-sunshine">cator</span></span>
           </a>
           <p class="mt-5 max-w-sm text-sm leading-6 text-slate-300">Teacher-guided, AI-assisted learning that helps Nigerian students build practical confidence.</p>
         </div>
         <div>
           <p class="text-sm font-black uppercase tracking-[0.2em] text-sunshine">Get in touch</p>
-          <a class="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-slate-200 transition hover:text-white" href="mailto:hello@aiducator.ng">{% include "components/icon.html" with icon="mail" icon_class="h-4 w-4" %}hello@aiducator.ng</a>
-          <a class="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-slate-200 transition hover:text-white" href="{% url 'courses:catalog' %}">{% include "components/icon.html" with icon="book-open" icon_class="h-4 w-4" %}Explore courses</a>
+          <a class="primary-button mt-4" href="mailto:hello@aiducator.ng">{% include "components/icon.html" with icon="mail" icon_class="h-4 w-4" %}Get in touch</a>
+          <p class="mt-3 text-sm text-slate-300">hello@aiducator.ng</p>
         </div>
         <div>
           <p class="text-sm font-black uppercase tracking-[0.2em] text-sunshine">Follow Aiducator</p>
