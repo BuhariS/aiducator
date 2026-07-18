@@ -4,16 +4,16 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="AIDUCATOR AI-assisted Python learning">
+    <meta name="description" content="Aiducator AI-assisted Python learning">
     <link rel="stylesheet" href="{% static 'css/app.css' %}">
-    <title>{% block title %}AIDUCATOR{% endblock %}</title>
+    <title>{% block title %}Aiducator{% endblock %}</title>
   </head>
   <body class="min-h-screen">
     <header class="border-b border-slate-200 bg-white/90 backdrop-blur">
       <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-        <a href="{% if request.user.is_authenticated %}{% url 'accounts:dashboard' %}{% else %}{% url 'courses:catalog' %}{% endif %}" class="flex items-center gap-3">
-          <span class="grid h-10 w-10 place-items-center rounded-xl bg-ink text-lg font-black text-white">A</span>
-          <span class="text-lg font-black tracking-tight text-ink">AIDUCATOR</span>
+        <a aria-label="Aiducator home" href="{% if request.user.is_authenticated %}{% url 'accounts:dashboard' %}{% else %}{% url 'courses:catalog' %}{% endif %}" class="brand-lockup group flex items-center gap-3">
+          <span class="brand-mark">A</span>
+          <span class="brand-word">Aidu<span class="brand-word-accent">cator</span></span>
         </a>
         <nav class="flex items-center gap-2 text-sm font-semibold">
           <a class="hidden rounded-lg px-3 py-2 text-slate-600 transition hover:bg-slate-50 hover:text-ink sm:inline-block" href="{% url 'courses:catalog' %}">Courses</a>

@@ -8,6 +8,7 @@ from courses.views import (
     create_course,
     create_course_version,
     delete_course,
+    final_project_form,
     generate_course,
     generation_status,
     lesson_form,
@@ -29,6 +30,11 @@ urlpatterns = [
     path("<slug:slug>/studio/versions/new/", create_course_version, name="create-version"),
     path("<slug:slug>/studio/versions/<uuid:version_id>/", version_editor, name="version-editor"),
     path("<slug:slug>/studio/versions/<uuid:version_id>/preview/", preview_version, name="preview-version"),
+    path(
+        "<slug:slug>/studio/versions/<uuid:version_id>/final-project/",
+        final_project_form,
+        name="final-project",
+    ),
     path(
         "<slug:slug>/studio/versions/<uuid:version_id>/preview/<uuid:lesson_id>/",
         preview_version,

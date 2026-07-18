@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ course.title }} · AIDUCATOR{% endblock %}
+{% block title %}{{ course.title }} · Aiducator{% endblock %}
 {% block content %}
 <section class="bg-ink"><div class="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8"><a class="text-sm font-bold text-sunshine hover:underline" href="{% url 'courses:catalog' %}">← Back to catalog</a><h1 class="mt-8 max-w-3xl text-4xl font-black leading-tight text-white sm:text-5xl">{{ course.title }}</h1><p class="mt-5 max-w-2xl text-lg leading-8 text-slate-300">{{ course.description }}</p></div></section>
 <section class="mx-auto grid max-w-7xl gap-8 px-4 py-12 sm:px-6 lg:grid-cols-[1fr_360px] lg:px-8">

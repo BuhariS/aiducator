@@ -2,7 +2,7 @@ from django import forms
 from django.utils.text import slugify
 from urllib.parse import urlparse
 
-from .models import Course, LessonArtifact, LessonVersion, Module
+from .models import Course, FinalProject, LessonArtifact, LessonVersion, Module
 
 
 class CourseForm(forms.ModelForm):
@@ -178,3 +178,88 @@ class LessonForm(forms.ModelForm):
         if commit:
             lesson.save()
         return lesson
+
+
+class FinalProjectForm(forms.ModelForm):
+    objectives_text = forms.CharField(
+        label="Project objectives",
+        help_text="Enter one objective per line.",
+        widget=forms.Textarea(attrs={"rows": 4}),
+    )
+    requirements_text = forms.CharField(
+        label="Requirements",
+        help_text="Enter one requirement per line.",
+        widget=forms.Textarea(attrs={"rows": 5}),
+    )
+    deliverables_text = forms.CharField(
+        label="Deliverables",
+        help_text="Enter one deliverable per line.",
+        widget=forms.Textarea(attrs={"rows": 4}),
+    )
+    rubric_text = forms.CharField(
+        label="Assessment rubric",
+        help_text="Enter one criterion per line. Criteria receive equal weight.",
+        widget=forms.Textarea(attrs={"rows": 5}),
+    )
+
+    class Meta:
+        model = FinalProject
+        fields = ("title", "brief", "estimated_hours")
+        widgets = {
+            "title": forms.TextInput(attrs={"placeholder": "Community Python project"}),
+            "brief": forms.Textarea(attrs={"rows": 8, "placeholder": "Describe the final project challenge..."}),
+            "estimated_hours": forms.NumberInput(attrs={"min": 1, "max": 100}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk:
+            self.fields["objectives_text"].initial = "\n".join(self.instance.objectives)
+            self.fields["requirements_text"].initial = "\n".join(self.instance.requirements)
+            self.fields["deliverables_text"].initial = "\n".join(self.instance.deliverables)
+            self.fields["rubric_text"].initial = "\n".join(
+                criterion.get("criterion", "") for criterion in self.instance.rubric
+            )
+
+    @staticmethod
+    def _lines(value):
+        return [line.strip() for line in value.splitlines() if line.strip()]
+
+    def clean_objectives_text(self):
+        objectives = self._lines(self.cleaned_data["objectives_text"])
+        if not objectives:
+            raise forms.ValidationError("Add at least one project objective.")
+        return objectives
+
+    def clean_requirements_text(self):
+        requirements = self._lines(self.cleaned_data["requirements_text"])
+        if not requirements:
+            raise forms.ValidationError("Add at least one project requirement.")
+        return requirements
+
+    def clean_deliverables_text(self):
+        deliverables = self._lines(self.cleaned_data["deliverables_text"])
+        if not deliverables:
+            raise forms.ValidationError("Add at least one project deliverable.")
+        return deliverables
+
+    def clean_rubric_text(self):
+        rubric = self._lines(self.cleaned_data["rubric_text"])
+        if not rubric:
+            raise forms.ValidationError("Add at least one project rubric criterion.")
+        return rubric
+
+    def save(self, commit=True):
+        project = super().save(commit=False)
+        project.objectives = self.cleaned_data["objectives_text"]
+        project.requirements = self.cleaned_data["requirements_text"]
+        project.deliverables = self.cleaned_data["deliverables_text"]
+        criteria = self.cleaned_data["rubric_text"]
+        project.rubric = [
+            {"criterion": criterion, "weight": round(100 / len(criteria), 2)}
+            for criterion in criteria
+        ]
+        project.teacher_approved = False
+        if commit:
+            project.save()
+        return project

@@ -14,7 +14,7 @@ from organizations.models import Membership, Organization
 COURSE_SLUG = "python-fundamentals"
 TEACHER_EMAIL = "teacher@aiducator.local"
 STUDENT_EMAIL = "student@aiducator.local"
-DEFAULT_PASSWORD = "AIDUCATOR123!"
+DEFAULT_PASSWORD = "Aiducator123!"
 
 MODULES = [
     (
@@ -93,13 +93,13 @@ MODULES = [
 
 
 class Command(BaseCommand):
-    help = "Seed the AIDUCATOR Nigerian secondary-school Python fundamentals course."
+    help = "Seed the Aiducator Nigerian secondary-school Python fundamentals course."
 
     @transaction.atomic
     def handle(self, *args, **options):
         organization, _ = Organization.objects.get_or_create(
             slug="aiducator-pilot-school",
-            defaults={"name": "AIDUCATOR Pilot School"},
+            defaults={"name": "Aiducator Pilot School"},
         )
 
         teacher, teacher_created = User.objects.get_or_create(
@@ -184,6 +184,7 @@ class Command(BaseCommand):
                         "prompt": prompt,
                         "max_score": 100,
                         "is_active": True,
+                        "is_objective": False,
                     },
                 )
                 RubricVersion.objects.update_or_create(
@@ -225,7 +226,7 @@ class Command(BaseCommand):
             },
         )
 
-        self.stdout.write(self.style.SUCCESS("AIDUCATOR Python course seeded successfully."))
+        self.stdout.write(self.style.SUCCESS("Aiducator Python course seeded successfully."))
         self.stdout.write(f"Organization: {organization.name} ({organization.slug})")
         self.stdout.write(f"Teacher: {teacher.email}")
         self.stdout.write(f"Student: {student.email}")

@@ -1,4 +1,4 @@
-# AIDUCATOR
+# Aiducator
 
 AI-assisted Python learning for Nigerian secondary-school students and teachers.
 
@@ -22,7 +22,7 @@ Seed the first Python course and demo accounts:
 uv run python manage.py seed_python_course
 ```
 
-New demo accounts use `AIDUCATOR123!` unless `AIDUCATOR_SEED_PASSWORD` is set before running the command. The command is safe to run repeatedly.
+New demo accounts use `Aiducator123!` unless `AIDUCATOR_SEED_PASSWORD` is set before running the command. The command is safe to run repeatedly.
 
 Install the frontend dependency and build Tailwind CSS:
 
@@ -39,7 +39,7 @@ Teacher course-generation details are in `docs/phase-4-course-generation.md`.
 
 Copy `.env.example` to `.env`. The default `fake` provider is safe for local development. To use OpenAI, set `AI_LLM_PROVIDER=openai` and provide `OPENAI_API_KEY` in `.env`. Keep the key server-side and never expose it to templates or JavaScript.
 
-Start Redis and the Django worker in separate terminals:
+In local debug mode, generation runs eagerly by default, so Redis and a worker are optional. To run the production-style asynchronous workflow, set `CELERY_TASK_ALWAYS_EAGER=0`, then start Redis and the Django worker in separate terminals:
 
 ```bash
 docker compose up -d redis

@@ -7,7 +7,7 @@ from django.core.exceptions import PermissionDenied
 from accounts.access import user_has_teacher_access
 from assessments.models import Question, RubricVersion
 
-from .models import Course, CourseVersion, LessonArtifact, LessonVersion, Module, Translation
+from .models import Course, CourseVersion, FinalProject, LessonArtifact, LessonVersion, Module, Translation
 
 
 @transaction.atomic
@@ -73,6 +73,7 @@ def create_draft_version(
                     max_score=source_question.max_score,
                     position=source_question.position,
                     is_active=source_question.is_active,
+                    is_objective=source_question.is_objective,
                 )
                 source_rubric = source_question.rubrics.order_by("-version_number").first()
                 if source_rubric:
@@ -82,4 +83,18 @@ def create_draft_version(
                         criteria=deepcopy(source_rubric.criteria),
                         total_score=source_rubric.total_score,
                     )
+    source_project = getattr(source, "final_project", None)
+    if source_project:
+        FinalProject.objects.create(
+            course_version=draft,
+            title=source_project.title,
+            brief=source_project.brief,
+            objectives=deepcopy(source_project.objectives),
+            requirements=deepcopy(source_project.requirements),
+            deliverables=deepcopy(source_project.deliverables),
+            rubric=deepcopy(source_project.rubric),
+            estimated_hours=source_project.estimated_hours,
+            ai_generated=source_project.ai_generated,
+            teacher_approved=False,
+        )
     return draft

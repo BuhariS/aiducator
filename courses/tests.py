@@ -8,13 +8,13 @@ from accounts.models import User
 from enrollments.models import Enrollment
 from organizations.models import Membership, Organization
 
-from .models import Course, CourseVersion, LessonArtifact, LessonVersion, Module
+from .models import Course, CourseVersion, FinalProject, LessonArtifact, LessonVersion, Module
 
 
 class CourseFlowTests(TestCase):
     def setUp(self):
         self.student = User.objects.create_user(email="student@example.com", password="StrongPass123!")
-        self.organization = Organization.objects.create(name="AIDUCATOR Pilot", slug="aiducator-pilot")
+        self.organization = Organization.objects.create(name="Aiducator Pilot", slug="aiducator-pilot")
         Membership.objects.create(organization=self.organization, user=self.student, role=Membership.Role.STUDENT)
         self.course = Course.objects.create(
             organization=self.organization,
@@ -373,7 +373,12 @@ class CourseGenerationTests(TestCase):
         self.assertEqual(version.course.status, Course.Status.DRAFT)
         self.assertGreater(version.modules.count(), 0)
         self.assertGreater(version.modules.first().lessons.first().questions.count(), 0)
+        self.assertFalse(
+            version.modules.first().lessons.first().questions.first().is_objective
+        )
         self.assertEqual(version.modules.first().lessons.first().translations.count(), 2)
+        self.assertTrue(version.final_project.ai_generated)
+        self.assertGreater(len(version.final_project.rubric), 0)
         self.assertFalse(CourseVersion.objects.filter(status=CourseVersion.Status.PUBLISHED).exists())
 
         status_response = self.client.get(
@@ -381,6 +386,38 @@ class CourseGenerationTests(TestCase):
         )
         self.assertContains(status_response, "Draft ready for teacher review.")
         self.assertContains(status_response, "Review draft in Course Studio")
+
+    def test_teacher_can_create_and_edit_a_manual_final_project(self):
+        course = Course.objects.create(
+            organization=self.organization,
+            created_by=self.teacher,
+            title="Manual project course",
+            slug="manual-project-course",
+        )
+        version = CourseVersion.objects.create(course=course, version_number=1, status=CourseVersion.Status.DRAFT)
+        response = self.client.post(
+            reverse(
+                "teacher_courses:final-project",
+                kwargs={"slug": course.slug, "version_id": version.id},
+            ),
+            {
+                "title": "School attendance tracker",
+                "brief": "Build a small Python program that helps a school club record and summarize attendance.",
+                "estimated_hours": 8,
+                "objectives_text": "Plan a practical program\nApply Python fundamentals",
+                "requirements_text": "Use input and output\nInclude a conditional",
+                "deliverables_text": "Python source code\nTest evidence",
+                "rubric_text": "Solves the stated problem\nExplains testing",
+            },
+        )
+        self.assertRedirects(
+            response,
+            reverse("teacher_courses:version-editor", kwargs={"slug": course.slug, "version_id": version.id}),
+        )
+        project = FinalProject.objects.get(course_version=version)
+        self.assertFalse(project.ai_generated)
+        self.assertEqual(project.objectives, ["Plan a practical program", "Apply Python fundamentals"])
+        self.assertEqual(len(project.rubric), 2)
 
     def test_student_cannot_view_another_users_generation_status(self):
         student = User.objects.create_user(email="generation-student@example.com", password="StrongPass123!")

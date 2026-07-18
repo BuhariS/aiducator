@@ -68,6 +68,36 @@ class CourseVersion(models.Model):
         return super().delete(*args, **kwargs)
 
 
+class FinalProject(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    course_version = models.OneToOneField(
+        CourseVersion,
+        on_delete=models.CASCADE,
+        related_name="final_project",
+    )
+    title = models.CharField(max_length=180)
+    brief = models.TextField()
+    objectives = models.JSONField(default=list)
+    requirements = models.JSONField(default=list)
+    deliverables = models.JSONField(default=list)
+    rubric = models.JSONField(default=list)
+    estimated_hours = models.PositiveSmallIntegerField(default=8)
+    ai_generated = models.BooleanField(default=False)
+    teacher_approved = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def save(self, *args, **kwargs):
+        if self.course_version.status == CourseVersion.Status.PUBLISHED:
+            raise ValidationError("Final projects in published course versions are immutable.")
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        if self.course_version.status == CourseVersion.Status.PUBLISHED:
+            raise ValidationError("Final projects in published course versions are immutable.")
+        return super().delete(*args, **kwargs)
+
+
 class Module(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     course_version = models.ForeignKey(CourseVersion, on_delete=models.CASCADE, related_name="modules")

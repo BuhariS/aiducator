@@ -1,8 +1,8 @@
-# AIDUCATOR Phase 1 Specification
+# Aiducator Phase 1 Specification
 
 ## 1. Product boundary
 
-AIDUCATOR is a 12-week, AI-assisted Python fundamentals course for Nigerian secondary-school students. Students complete lessons and submit typed answers through protected assessment textboxes. The AI evaluates submissions against a teacher-approved rubric and recommends a score and feedback. A teacher confirms or overrides the result before it becomes final.
+Aiducator is a 12-week, AI-assisted Python fundamentals course for Nigerian secondary-school students. Students complete lessons and submit typed answers through protected assessment textboxes. The AI evaluates submissions against a teacher-approved rubric and recommends a score and feedback. A teacher confirms or overrides the result before it becomes final.
 
 The first release is English-first, mobile-friendly, and designed for intermittent connectivity. It targets beginner Senior Secondary students by default; the pilot must confirm the precise year group before content is finalized.
 

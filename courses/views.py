@@ -16,8 +16,8 @@ from enrollments.models import Enrollment, LessonProgress
 from enrollments.services import mark_lesson_complete
 from organizations.models import Membership
 
-from .forms import ArtifactForm, CourseForm, CourseGenerationForm, LessonForm, ModuleForm
-from .models import Course, CourseVersion, LessonArtifact, LessonVersion, Module
+from .forms import ArtifactForm, CourseForm, CourseGenerationForm, FinalProjectForm, LessonForm, ModuleForm
+from .models import Course, CourseVersion, FinalProject, LessonArtifact, LessonVersion, Module
 from .services import create_draft_version
 
 
@@ -86,6 +86,7 @@ def learn(request, slug, lesson_id=None):
             "course": course,
             "enrollment": enrollment,
             "modules": modules,
+            "final_project": getattr(version, "final_project", None),
             "first_lesson": selected_lesson,
             "selected_lesson": selected_lesson,
             "progress_by_lesson": progress_by_lesson,
@@ -331,6 +332,7 @@ def preview_version(request, slug, version_id, lesson_id=None):
             "course": course,
             "version": version,
             "modules": modules,
+            "final_project": getattr(version, "final_project", None),
             "selected_lesson": selected_lesson,
         },
     )
@@ -346,6 +348,30 @@ def create_course_version(request, slug):
     if draft is None:
         draft = create_draft_version(course, actor=request.user)
     return redirect("teacher_courses:version-editor", slug=course.slug, version_id=draft.id)
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def final_project_form(request, slug, version_id):
+    course, version, error = _get_editable_version(request, slug, version_id)
+    if error:
+        return error
+    project = getattr(version, "final_project", None)
+    if request.method == "POST":
+        if project is None:
+            project = FinalProject(course_version=version)
+        form = FinalProjectForm(request.POST, instance=project)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Final project saved to the draft version.")
+            return redirect("teacher_courses:version-editor", slug=course.slug, version_id=version.id)
+    else:
+        form = FinalProjectForm(instance=project)
+    return render(
+        request,
+        "courses/final_project_form.html",
+        {"course": course, "version": version, "project": project, "form": form},
+    )
 
 
 def _get_editable_version(request, slug, version_id):
@@ -388,6 +414,7 @@ def version_editor(request, slug, version_id):
             "course": course,
             "version": version,
             "modules": modules,
+            "final_project": getattr(version, "final_project", None),
             "validation_errors": _version_validation_errors(version, modules),
         },
     )
@@ -551,6 +578,7 @@ def publish_version(request, slug, version_id):
         version.save(update_fields=["status", "approved_by", "approved_at"])
         course.status = Course.Status.PUBLISHED
         course.save(update_fields=["status", "updated_at"])
+        FinalProject.objects.filter(course_version=version).update(teacher_approved=True)
         CourseGenerationRequest.objects.filter(generated_version=version).update(
             status=CourseGenerationRequest.Status.PUBLISHED,
             completed_at=now,

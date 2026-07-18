@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Course, CourseVersion, Lesson, LessonArtifact, LessonVersion, Module, Translation
+from .models import Course, CourseVersion, FinalProject, Lesson, LessonArtifact, LessonVersion, Module, Translation
 
 
 @admin.register(Course)
@@ -18,6 +18,14 @@ class CourseVersionAdmin(admin.ModelAdmin):
     list_filter = ("status", "generated_by_ai")
     search_fields = ("course__title", "approved_by__email")
     readonly_fields = ("id", "created_at")
+
+
+@admin.register(FinalProject)
+class FinalProjectAdmin(admin.ModelAdmin):
+    list_display = ("title", "course_version", "ai_generated", "teacher_approved", "estimated_hours", "updated_at")
+    list_filter = ("ai_generated", "teacher_approved")
+    search_fields = ("title", "brief", "course_version__course__title")
+    readonly_fields = ("id", "created_at", "updated_at")
 
 
 @admin.register(Module)

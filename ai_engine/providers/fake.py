@@ -107,6 +107,35 @@ class FakeCourseGenerationProvider:
             description=description
             or f"A {request.duration_weeks}-week course for {request.audience or 'secondary-school learners'} with guided lessons and assessments.",
             modules=modules,
+            final_project={
+                "title": f"{request.title}: community problem-solving project",
+                "brief": (
+                    "Design and build a small Python solution to a practical problem in your school or community. "
+                    "Explain your choices, demonstrate the program, and reflect on how you tested it."
+                ),
+                "objectives": [
+                    "Plan a small Python solution from a real-world problem",
+                    "Apply Python fundamentals in a working program",
+                    "Explain and test the implementation clearly",
+                ],
+                "requirements": [
+                    "Use variables, input or output, and at least one control structure",
+                    "Include comments that explain important decisions",
+                    "Test the program with at least three examples",
+                ],
+                "deliverables": [
+                    "Python source code",
+                    "Short project explanation",
+                    "Demonstration or test evidence",
+                ],
+                "rubric": [
+                    {"criterion": "The program solves a clearly defined problem", "weight": 30},
+                    {"criterion": "The Python implementation is accurate and readable", "weight": 30},
+                    {"criterion": "Testing evidence is relevant and complete", "weight": 20},
+                    {"criterion": "The learner explains decisions and limitations", "weight": 20},
+                ],
+                "estimated_hours": max(4, min(20, request.duration_weeks // 2)),
+            },
         )
         return ProviderCourseGeneration(
             result=result,

@@ -4,7 +4,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 
 from assessments.models import Question, RubricVersion
-from courses.models import CourseVersion, LessonArtifact, LessonVersion, Module, Translation
+from courses.models import CourseVersion, FinalProject, LessonArtifact, LessonVersion, Module, Translation
 
 from .models import CourseGenerationRequest
 from .schemas import CourseGenerationResult
@@ -74,6 +74,7 @@ def persist_generation_result(request: CourseGenerationRequest, result: CourseGe
                     max_score=generated_question.max_score,
                     position=question_position,
                     is_active=True,
+                    is_objective=False,
                 )
                 RubricVersion.objects.create(
                     question=question,
@@ -90,6 +91,20 @@ def persist_generation_result(request: CourseGenerationRequest, result: CourseGe
                         "status": Translation.Status.DRAFT,
                     },
                 )
+
+    generated_project = result.final_project
+    FinalProject.objects.create(
+        course_version=draft,
+        title=generated_project.title,
+        brief=generated_project.brief,
+        objectives=deepcopy(generated_project.objectives),
+        requirements=deepcopy(generated_project.requirements),
+        deliverables=deepcopy(generated_project.deliverables),
+        rubric=[criterion.model_dump() for criterion in generated_project.rubric],
+        estimated_hours=generated_project.estimated_hours,
+        ai_generated=True,
+        teacher_approved=False,
+    )
 
     request.generated_version = draft
     request.status = CourseGenerationRequest.Status.REVIEW

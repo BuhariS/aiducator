@@ -119,10 +119,27 @@ class GeneratedModule(BaseModel):
     _safe_title = field_validator("title")(_reject_unsafe_text)
 
 
+class GeneratedFinalProject(BaseModel):
+    title: str = Field(min_length=3, max_length=180)
+    brief: str = Field(min_length=30, max_length=10000)
+    objectives: list[str] = Field(min_length=1, max_length=8)
+    requirements: list[str] = Field(min_length=1, max_length=12)
+    deliverables: list[str] = Field(min_length=1, max_length=8)
+    rubric: list[GeneratedRubricCriterion] = Field(min_length=1, max_length=12)
+    estimated_hours: int = Field(default=8, ge=1, le=100)
+
+    _safe_title = field_validator("title")(_reject_unsafe_text)
+    _safe_brief = field_validator("brief")(_reject_unsafe_text)
+    _safe_objectives = field_validator("objectives")(_reject_unsafe_payload)
+    _safe_requirements = field_validator("requirements")(_reject_unsafe_payload)
+    _safe_deliverables = field_validator("deliverables")(_reject_unsafe_payload)
+
+
 class CourseGenerationResult(BaseModel):
     title: str = Field(min_length=3, max_length=180)
     description: str = Field(min_length=20, max_length=5000)
     modules: list[GeneratedModule] = Field(min_length=1, max_length=20)
+    final_project: GeneratedFinalProject
 
     _safe_title = field_validator("title")(_reject_unsafe_text)
     _safe_description = field_validator("description")(_reject_unsafe_text)
