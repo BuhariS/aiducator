@@ -1,9 +1,10 @@
+from types import SimpleNamespace
 from unittest.mock import patch
 
-from django.test import TestCase, override_settings
 from django.core.exceptions import PermissionDenied
-from django.utils import timezone
+from django.test import TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from accounts.models import User
 from ai_engine.models import AIJob
@@ -24,6 +25,7 @@ from .models import (
     ReviewQueueItem,
     RubricVersion,
 )
+from .sandbox import execute_python_in_isolated_sandbox
 from .views import finalize_review
 
 
@@ -218,3 +220,26 @@ class AttemptFlowTests(TestCase):
         )
         with self.assertRaises(PermissionDenied):
             finalize_review(review, outsider, 70)
+
+
+class SandboxSecurityTests(TestCase):
+    @patch("assessments.sandbox.shutil.which", return_value="/usr/bin/docker")
+    @patch("assessments.sandbox.subprocess.run")
+    def test_sandbox_applies_resource_and_network_restrictions(self, run, which):
+        run.side_effect = [
+            SimpleNamespace(returncode=0),
+            SimpleNamespace(returncode=0, stdout="", stderr=""),
+        ]
+
+        result = execute_python_in_isolated_sandbox("print(2 + 2)")
+
+        self.assertEqual(result["status"], "succeeded")
+        command = run.call_args_list[1].args[0]
+        self.assertIn("--network=none", command)
+        self.assertIn("--read-only", command)
+        self.assertIn("--cap-drop=ALL", command)
+        self.assertIn("--user=65532:65532", command)
+        self.assertIn("--pids-limit=32", command)
+        self.assertIn("--ulimit=cpu=2:2", command)
+        self.assertIn("-I", command)
+        self.assertIn("-B", command)

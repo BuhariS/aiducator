@@ -3,8 +3,9 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from ai_engine.models import AIJob, CourseGenerationRequest
 from accounts.models import User
+from ai_engine.models import AIJob, CourseGenerationRequest
+from analytics.models import AuditEvent
 from enrollments.models import Enrollment
 from organizations.models import Membership, Organization
 
@@ -380,6 +381,24 @@ class CourseGenerationTests(TestCase):
         self.assertTrue(version.final_project.ai_generated)
         self.assertGreater(len(version.final_project.rubric), 0)
         self.assertFalse(CourseVersion.objects.filter(status=CourseVersion.Status.PUBLISHED).exists())
+        self.assertTrue(AuditEvent.objects.filter(action="ai_course_generation_requested").exists())
+        self.assertTrue(version.modules.first().lessons.first().artifacts.filter(ai_generated=True, teacher_approved=False).exists())
+
+        publish_response = self.client.post(
+            reverse(
+                "teacher_courses:publish-version",
+                kwargs={"slug": version.course.slug, "version_id": version.id},
+            )
+        )
+        self.assertRedirects(
+            publish_response,
+            reverse(
+                "teacher_courses:version-editor",
+                kwargs={"slug": version.course.slug, "version_id": version.id},
+            ),
+        )
+        version.refresh_from_db()
+        self.assertEqual(version.status, CourseVersion.Status.DRAFT)
 
         status_response = self.client.get(
             reverse("teacher_courses:generation-status", kwargs={"request_id": generation_request.id})

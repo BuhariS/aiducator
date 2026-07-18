@@ -35,6 +35,8 @@ Use `npm run dev` during UI development. The implementation plan, schema, user j
 
 Teacher course-generation details are in `docs/phase-4-course-generation.md`.
 
+Content safety and production security controls are documented in `docs/content-safety.md`.
+
 ## AI grading worker
 
 Copy `.env.example` to `.env`. The default `fake` provider is safe for local development. To use OpenAI, set `AI_LLM_PROVIDER=openai` and provide `OPENAI_API_KEY` in `.env`. Keep the key server-side and never expose it to templates or JavaScript.
