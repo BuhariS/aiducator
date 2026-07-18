@@ -8,7 +8,7 @@ module.exports = {
     extend: {
       colors: {
         ink: "#14213D",
-        emerald: "#0F766E",
+        emerald: "#00008B",
         sunshine: "#F4B942",
         cloud: "#F6F8FB"
       },
