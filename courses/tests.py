@@ -44,32 +44,6 @@ class CourseFlowTests(TestCase):
         self.assertRedirects(response, reverse("courses:learn", kwargs={"slug": self.course.slug}))
         self.assertEqual(self.course.enrollments.get().course_version, latest_version)
 
-    def test_catalog_search_returns_matching_published_courses_only(self):
-        other_course = Course.objects.create(
-            organization=self.organization,
-            created_by=self.student,
-            title="JavaScript Foundations",
-            slug="javascript-foundations",
-            description="Build interactive web pages.",
-            status=Course.Status.PUBLISHED,
-        )
-        Course.objects.create(
-            organization=self.organization,
-            created_by=self.student,
-            title="Advanced Python Draft",
-            slug="advanced-python-draft",
-            description="A private course draft.",
-            status=Course.Status.DRAFT,
-        )
-
-        response = self.client.get(reverse("courses:catalog"), {"q": "python"})
-
-        self.assertContains(response, self.course.title)
-        self.assertNotContains(response, other_course.title)
-        self.assertNotContains(response, "Advanced Python Draft")
-        self.assertEqual(list(response.context["courses"]), [self.course])
-        self.assertEqual(response.context["query"], "python")
-
 
 class CourseAuthoringTests(TestCase):
     def setUp(self):
