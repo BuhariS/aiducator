@@ -15,24 +15,21 @@
           <span class="brand-mark">A</span>
           <span class="brand-word">Aidu<span class="brand-word-accent">cator</span></span>
         </a>
-        {% with current_namespace=request.resolver_match.namespace current_url_name=request.resolver_match.url_name %}
-          <nav class="flex items-center gap-2 text-sm font-semibold">
-            {% if request.user.is_authenticated %}
-              <a {% if current_namespace == "dashboard" or current_namespace == "analytics" or current_namespace == "teacher_courses" or current_namespace == "assessments" or current_namespace == "accounts" and current_url_name == "dashboard" %}aria-current="page"{% endif %} class="{% if current_namespace == "dashboard" or current_namespace == "analytics" or current_namespace == "teacher_courses" or current_namespace == "assessments" or current_namespace == "accounts" and current_url_name == "dashboard" %}nav-button-active{% else %}nav-button{% endif %} hidden sm:inline-flex" href="{% url 'accounts:dashboard' %}">{% include "components/icon.html" with icon="dashboard" icon_class="h-4 w-4" %}Dashboard</a>
-              <a {% if current_namespace == "courses" %}aria-current="page"{% endif %} class="{% if current_namespace == "courses" %}nav-button-active{% else %}nav-button{% endif %} hidden sm:inline-flex" href="{% url 'courses:catalog' %}">{% include "components/icon.html" with icon="book-open" icon_class="h-4 w-4" %}Courses</a>
-              {% if request.user.is_staff %}<a class="nav-button hidden lg:inline-flex" href="{% url 'admin:index' %}">{% include "components/icon.html" with icon="shield" icon_class="h-4 w-4" %}Admin</a>{% endif %}
-              <a {% if current_namespace == "accounts" and current_url_name == "profile" %}aria-current="page"{% endif %} class="{% if current_namespace == "accounts" and current_url_name == "profile" %}nav-button-active{% else %}nav-button{% endif %} flex" href="{% url 'accounts:profile' %}">{% include "components/icon.html" with icon="user" icon_class="h-4 w-4" %}{{ request.user.first_name|default:request.user.email }}</a>
-              <form method="post" action="{% url 'accounts:logout' %}">
-                {% csrf_token %}
-                <button class="nav-button" type="submit">{% include "components/icon.html" with icon="logout" icon_class="h-4 w-4" %}Log out</button>
-              </form>
-            {% else %}
-              <a {% if current_namespace == "courses" %}aria-current="page"{% endif %} class="{% if current_namespace == "courses" %}nav-button-active{% else %}nav-button{% endif %} hidden sm:inline-flex" href="{% url 'courses:catalog' %}">{% include "components/icon.html" with icon="book-open" icon_class="h-4 w-4" %}Courses</a>
-              <a {% if current_namespace == "accounts" and current_url_name != "signup" and current_url_name != "signup-teacher" and current_url_name != "signup-student" %}aria-current="page"{% endif %} class="{% if current_namespace == "accounts" and current_url_name != "signup" and current_url_name != "signup-teacher" and current_url_name != "signup-student" %}nav-button-active{% else %}nav-button{% endif %}" href="{% url 'accounts:login' %}">Sign in</a>
-              <a {% if current_namespace == "accounts" and current_url_name == "signup" or current_namespace == "accounts" and current_url_name == "signup-teacher" or current_namespace == "accounts" and current_url_name == "signup-student" %}aria-current="page"{% endif %} class="{% if current_namespace == "accounts" and current_url_name == "signup" or current_namespace == "accounts" and current_url_name == "signup-teacher" or current_namespace == "accounts" and current_url_name == "signup-student" %}nav-button-active{% else %}nav-button{% endif %}" href="{% url 'accounts:signup' %}">{% include "components/icon.html" with icon="plus" icon_class="h-4 w-4" %}Get started</a>
-            {% endif %}
-          </nav>
-        {% endwith %}
+        <nav class="flex items-center gap-2 text-sm font-semibold">
+          <a class="hidden items-center gap-2 rounded-lg px-3 py-2 text-slate-600 transition hover:bg-slate-50 hover:text-ink sm:inline-flex" href="{% url 'courses:catalog' %}">{% include "components/icon.html" with icon="book-open" icon_class="h-4 w-4" %}Courses</a>
+          {% if request.user.is_authenticated %}
+            <a class="hidden items-center gap-2 rounded-lg px-3 py-2 text-slate-600 transition hover:bg-slate-50 hover:text-ink sm:inline-flex" href="{% url 'accounts:dashboard' %}">{% include "components/icon.html" with icon="dashboard" icon_class="h-4 w-4" %}Dashboard</a>
+            {% if request.user.is_staff %}<a class="hidden items-center gap-2 rounded-lg px-3 py-2 text-slate-600 transition hover:bg-slate-50 hover:text-ink lg:inline-flex" href="{% url 'admin:index' %}">{% include "components/icon.html" with icon="shield" icon_class="h-4 w-4" %}Admin</a>{% endif %}
+            <a class="flex items-center gap-2 rounded-lg px-3 py-2 text-slate-600 transition hover:bg-slate-50 hover:text-ink" href="{% url 'accounts:profile' %}">{% include "components/icon.html" with icon="user" icon_class="h-4 w-4" %}{{ request.user.first_name|default:request.user.email }}</a>
+            <form method="post" action="{% url 'accounts:logout' %}">
+              {% csrf_token %}
+              <button class="inline-flex items-center gap-2 rounded-xl bg-ink px-3 py-2 text-white transition hover:bg-slate-700" type="submit">{% include "components/icon.html" with icon="logout" icon_class="h-4 w-4" %}Log out</button>
+            </form>
+          {% else %}
+            <a class="rounded-lg px-3 py-2 text-slate-600 transition hover:bg-slate-50 hover:text-ink" href="{% url 'accounts:login' %}">Sign in</a>
+            <a class="primary-button" href="{% url 'accounts:signup' %}">{% include "components/icon.html" with icon="plus" icon_class="h-4 w-4" %}Get started</a>
+          {% endif %}
+        </nav>
       </div>
     </header>
 

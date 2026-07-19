@@ -17,14 +17,6 @@
     @apply inline-flex items-center justify-center gap-2 rounded-xl bg-emerald px-4 py-2.5 font-semibold text-white transition hover:bg-blue-900 focus:outline-none focus:ring-2 focus:ring-emerald focus:ring-offset-2;
   }
 
-  .nav-button {
-    @apply inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-slate-600 transition hover:border-slate-300 hover:bg-slate-100 hover:text-ink focus:outline-none focus:ring-2 focus:ring-emerald focus:ring-offset-2;
-  }
-
-  .nav-button-active {
-    @apply inline-flex items-center gap-2 rounded-xl border border-emerald bg-emerald px-3 py-2 text-white shadow-sm transition hover:bg-blue-900 focus:outline-none focus:ring-2 focus:ring-emerald focus:ring-offset-2;
-  }
-
   .brand-mark {
     @apply grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-emerald to-ink text-lg font-black text-white shadow-card transition-transform duration-200 group-hover:-rotate-3 group-hover:scale-105;
   }
