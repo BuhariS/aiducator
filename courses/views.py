@@ -3,6 +3,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Avg
 from django.http import Http404, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -19,8 +20,8 @@ from ai_engine.models import AIJob, CourseGenerationRequest
 from ai_engine.rate_limit import rate_limit
 from analytics.security import record_audit_event
 from assessments.forms import QuestionForm, RubricForm
-from assessments.models import Appeal, Attempt, Question, ReviewQueueItem, RubricVersion
-from enrollments.models import Enrollment, LessonProgress
+from assessments.models import Appeal, Attempt, GradeDecision, Question, ReviewQueueItem, RubricVersion
+from enrollments.models import CourseCompletion, Enrollment, LessonProgress
 from enrollments.services import mark_lesson_complete
 from organizations.models import Membership
 
@@ -45,7 +46,11 @@ def catalog(request):
 def course_detail(request, slug):
     course = get_object_or_404(Course, slug=slug, status=Course.Status.PUBLISHED)
     version = course.versions.filter(status=CourseVersion.Status.PUBLISHED).first()
-    enrollment = Enrollment.objects.filter(course=course, student=request.user).first()
+    enrollment = Enrollment.objects.filter(
+        course=course,
+        student=request.user,
+        status=Enrollment.Status.ACTIVE,
+    ).first()
     return render(request, "courses/detail.html", {"course": course, "version": version, "enrollment": enrollment})
 
 
@@ -56,12 +61,43 @@ def enroll(request, slug):
     version = course.versions.filter(status=CourseVersion.Status.PUBLISHED).order_by("-version_number").first()
     if version is None:
         raise Http404("No published course version is available for enrollment.")
-    Enrollment.objects.get_or_create(
-        course=course,
-        student=request.user,
-        defaults={"course_version": version},
-    )
+    enrollment = Enrollment.objects.filter(course=course, student=request.user).first()
+    if enrollment is None:
+        Enrollment.objects.create(
+            course=course,
+            student=request.user,
+            course_version=version,
+        )
+    elif enrollment.status != Enrollment.Status.ACTIVE:
+        enrollment.status = Enrollment.Status.ACTIVE
+        enrollment.course_version = version
+        enrollment.completed_at = None
+        enrollment.save(update_fields=["status", "course_version", "completed_at"])
     return redirect("courses:learn", slug=course.slug)
+
+
+@login_required
+@require_POST
+def unenroll(request, slug):
+    if not user_is_student(request.user):
+        return HttpResponseForbidden("You do not have access to student enrollment actions.")
+    enrollment = get_object_or_404(
+        Enrollment.objects.select_related("course"),
+        course__slug=slug,
+        student=request.user,
+        status=Enrollment.Status.ACTIVE,
+    )
+    enrollment.status = Enrollment.Status.WITHDRAWN
+    enrollment.save(update_fields=["status"])
+    record_audit_event(
+        action="course_unenrolled",
+        actor=request.user,
+        obj=enrollment,
+        request=request,
+        metadata={"course_id": str(enrollment.course_id)},
+    )
+    messages.success(request, f"You have unenrolled from {enrollment.course.title}. Your progress has been saved.")
+    return redirect("dashboard:student-dashboard")
 
 
 @login_required
@@ -77,16 +113,19 @@ def learn(request, slug, lesson_id=None):
     modules = list(version.modules.prefetch_related("lessons__questions", "lessons__artifacts").all())
     lessons = [lesson for module in modules for lesson in module.lessons.all()]
     if lesson_id:
-        selected_lesson = get_object_or_404(
-            LessonVersion,
-            id=lesson_id,
-            module__course_version=version,
-        )
+        selected_lesson = next((lesson for lesson in lessons if lesson.id == lesson_id), None)
+        if selected_lesson is None:
+            raise Http404("This lesson does not belong to the enrolled course version.")
     else:
         selected_lesson = lessons[0] if lessons else None
+    next_lesson = None
+    if selected_lesson:
+        selected_index = lessons.index(selected_lesson)
+        if selected_index + 1 < len(lessons):
+            next_lesson = lessons[selected_index + 1]
     progress = LessonProgress.objects.filter(enrollment=enrollment)
     attempts = Attempt.objects.filter(enrollment=enrollment, question__lesson_version__in=lessons).select_related(
-        "grade_decision"
+        "ai_grade", "grade_decision"
     )
     progress_by_lesson = {item.lesson_version_id: item for item in progress}
     attempts_by_question = {attempt.question_id: attempt for attempt in attempts}
@@ -94,6 +133,17 @@ def learn(request, slug, lesson_id=None):
         lesson.student_progress = progress_by_lesson.get(lesson.id)
         for question in lesson.questions.all():
             question.student_attempt = attempts_by_question.get(question.id)
+        active_questions = [question for question in lesson.questions.all() if question.is_active]
+        lesson.assessment_graded = bool(active_questions) and all(
+            getattr(question.student_attempt, "ai_grade", None) for question in active_questions
+        )
+        lesson.is_completed = bool(
+            lesson.student_progress and lesson.student_progress.status == LessonProgress.Status.COMPLETED
+        ) or lesson.assessment_graded
+    for module in modules:
+        module_lessons = list(module.lessons.all())
+        module.is_completed = bool(module_lessons) and all(lesson.is_completed for lesson in module_lessons)
+    course_completion = CourseCompletion.objects.filter(enrollment=enrollment).first()
     return render(
         request,
         "courses/learn.html",
@@ -104,6 +154,8 @@ def learn(request, slug, lesson_id=None):
             "final_project": getattr(version, "final_project", None),
             "first_lesson": selected_lesson,
             "selected_lesson": selected_lesson,
+            "next_lesson": next_lesson,
+            "course_completion": course_completion,
             "progress_by_lesson": progress_by_lesson,
             "attempts_by_question": attempts_by_question,
         },
@@ -134,11 +186,32 @@ def mark_lesson_complete_view(request, slug, lesson_id):
 def student_dashboard(request):
     if not user_is_student(request.user):
         return HttpResponseForbidden("You do not have access to the student dashboard.")
-    enrollments = Enrollment.objects.filter(student=request.user, status=Enrollment.Status.ACTIVE).select_related("course", "course_version")
+    enrollments = list(
+        Enrollment.objects.filter(student=request.user, status=Enrollment.Status.ACTIVE).select_related("course", "course_version")
+    )
+    average_marks = {
+        item["attempt__enrollment_id"]: item["average_mark"]
+        for item in GradeDecision.objects.filter(attempt__enrollment__in=enrollments)
+        .values("attempt__enrollment_id")
+        .annotate(average_mark=Avg("final_score"))
+    }
+    overall_average_mark = GradeDecision.objects.filter(attempt__enrollment__in=enrollments).aggregate(
+        average_mark=Avg("final_score")
+    )["average_mark"]
     for enrollment in enrollments:
         enrollment.progress_count = enrollment.lesson_progress.filter(status=LessonProgress.Status.COMPLETED).count()
         enrollment.lesson_count = LessonVersion.objects.filter(module__course_version=enrollment.course_version).count()
-    return render(request, "courses/student_dashboard.html", {"enrollments": enrollments})
+        enrollment.progress_percentage = round((enrollment.progress_count / enrollment.lesson_count) * 100) if enrollment.lesson_count else 0
+        average_mark = average_marks.get(enrollment.id)
+        enrollment.average_mark = round(float(average_mark)) if average_mark is not None else None
+    return render(
+        request,
+        "courses/student_dashboard.html",
+        {
+            "enrollments": enrollments,
+            "overall_average_mark": round(float(overall_average_mark)) if overall_average_mark is not None else None,
+        },
+    )
 
 
 @login_required

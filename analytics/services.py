@@ -120,6 +120,36 @@ def teacher_analytics(user):
     return [teacher_course_metrics(course) for course in courses]
 
 
+def analytics_analysis_payload(course_metrics):
+    return {
+        "courses": [
+            {
+                "title": item["course"].title,
+                "completion_rate": item["completion_rate"],
+                "enrollment_count": item["enrollment_count"],
+                "assessment_average": item["assessment_average"],
+                "assessment_pass_rate": item["assessment_pass_rate"],
+                "students_needing_help": len(item["students_needing_help"]),
+                "ai_overrides": item["ai_overridden"],
+                "ai_human_gap": item["ai_human_gap"],
+                "common_mistakes": [
+                    {"mistake": mistake, "count": count}
+                    for mistake, count in item["common_mistakes"]
+                ],
+                "lesson_metrics": [
+                    {
+                        "title": lesson["title"],
+                        "minutes": lesson["minutes"],
+                        "dropoff_rate": lesson["dropoff_rate"],
+                    }
+                    for lesson in item["lesson_metrics"]
+                ],
+            }
+            for item in course_metrics
+        ]
+    }
+
+
 def administrator_analytics(organizations):
     organization_ids = organizations.values("id")
     courses = Course.objects.filter(organization_id__in=organization_ids)

@@ -47,6 +47,13 @@ class AttemptFlowTests(TestCase):
         version = CourseVersion.objects.create(course=course, version_number=1, status=CourseVersion.Status.DRAFT)
         module = Module.objects.create(course_version=version, title="Variables", position=1)
         lesson = LessonVersion.objects.create(module=module, title="Values", content="Learn values.", position=1)
+        next_module = Module.objects.create(course_version=version, title="Control flow", position=2)
+        self.next_lesson = LessonVersion.objects.create(
+            module=next_module,
+            title="Conditions",
+            content="Learn conditions.",
+            position=1,
+        )
         self.question = Question.objects.create(lesson_version=lesson, question_type=Question.QuestionType.EXPLANATION, prompt="Explain a variable.")
         RubricVersion.objects.create(
             question=self.question,
@@ -91,6 +98,40 @@ class AttemptFlowTests(TestCase):
         self.assertContains(response, f"{attempt.ai_grade.suggested_score}%")
         self.assertContains(response, "Subject to teacher moderation")
         self.assertContains(response, "not your final result")
+
+    def test_attempt_status_next_button_opens_the_next_module(self):
+        self.client.force_login(self.student)
+        with self.captureOnCommitCallbacks(execute=True):
+            self.client.post(
+                reverse("assessments:submit", kwargs={"question_id": self.question.id}),
+                {"answer_text": "A variable stores a value and gives it a reusable name."},
+            )
+
+        attempt = Attempt.objects.get()
+        response = self.client.get(reverse("assessments:attempt-status", kwargs={"attempt_id": attempt.id}))
+
+        self.assertContains(response, "Next module")
+        self.assertContains(
+            response,
+            f'href="{reverse("courses:learn-lesson", kwargs={"slug": self.enrollment.course.slug, "lesson_id": self.next_lesson.id})}"',
+        )
+
+    def test_course_map_marks_a_module_when_its_assessment_has_an_ai_grade(self):
+        self.client.force_login(self.student)
+        with self.captureOnCommitCallbacks(execute=True):
+            self.client.post(
+                reverse("assessments:submit", kwargs={"question_id": self.question.id}),
+                {"answer_text": "A variable stores a value and gives it a reusable name."},
+            )
+
+        response = self.client.get(
+            reverse(
+                "courses:learn-lesson",
+                kwargs={"slug": self.enrollment.course.slug, "lesson_id": self.question.lesson_version_id},
+            )
+        )
+
+        self.assertContains(response, 'aria-label="Module complete"')
 
     def test_teacher_can_confirm_ai_grade(self):
         self.client.force_login(self.student)

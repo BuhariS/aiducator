@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Protocol
 
-from ai_engine.schemas import CourseGenerationResult, GradingResult
+from ai_engine.schemas import AnalyticsAnalysisResult, CourseGenerationResult, GradingResult
 
 
 class ProviderError(Exception):
@@ -38,6 +38,16 @@ class ProviderCourseGeneration:
     response_id: str = ""
 
 
+@dataclass(frozen=True)
+class ProviderAnalyticsAnalysis:
+    result: AnalyticsAnalysisResult
+    provider: str
+    model: str
+    input_tokens: int = 0
+    output_tokens: int = 0
+    response_id: str = ""
+
+
 class GradingProvider(Protocol):
     def grade(
         self,
@@ -52,4 +62,9 @@ class GradingProvider(Protocol):
 
 class CourseGenerationProvider(Protocol):
     def generate(self, request: CourseGenerationInput) -> ProviderCourseGeneration:
+        ...
+
+
+class AnalyticsAnalyzer(Protocol):
+    def analyze(self, metrics: dict) -> ProviderAnalyticsAnalysis:
         ...

@@ -7,6 +7,7 @@ from .views import (
     enroll,
     learn,
     mark_lesson_complete_view,
+    unenroll,
 )
 
 app_name = "courses"
@@ -15,6 +16,7 @@ urlpatterns = [
     path("", catalog, name="catalog"),
     path("<slug:slug>/", course_detail, name="detail"),
     path("<slug:slug>/enroll/", enroll, name="enroll"),
+    path("<slug:slug>/unenroll/", unenroll, name="unenroll"),
     path("<slug:slug>/learn/", learn, name="learn"),
     path("<slug:slug>/learn/<uuid:lesson_id>/", learn, name="learn-lesson"),
     path("<slug:slug>/learn/<uuid:lesson_id>/complete/", mark_lesson_complete_view, name="complete-lesson"),

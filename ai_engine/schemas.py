@@ -68,6 +68,26 @@ class GradingResult(BaseModel):
         return self.requires_review
 
 
+class AnalyticsInsight(BaseModel):
+    priority: Literal["high", "medium", "low"] = "medium"
+    title: str = Field(min_length=3, max_length=180)
+    evidence: str = Field(min_length=3, max_length=600)
+    action: str = Field(min_length=3, max_length=800)
+
+    _safe_title = field_validator("title")(_reject_unsafe_text)
+    _safe_evidence = field_validator("evidence")(_reject_unsafe_text)
+    _safe_action = field_validator("action")(_reject_unsafe_text)
+
+
+class AnalyticsAnalysisResult(BaseModel):
+    summary: str = Field(min_length=3, max_length=1200)
+    insights: list[AnalyticsInsight] = Field(min_length=1, max_length=8)
+    next_steps: list[str] = Field(min_length=1, max_length=6)
+
+    _safe_summary = field_validator("summary")(_reject_unsafe_text)
+    _safe_next_steps = field_validator("next_steps")(_reject_unsafe_payload)
+
+
 class GeneratedArtifact(BaseModel):
     artifact_type: GENERATED_ARTIFACT_TYPES
     content: str = Field(min_length=1, max_length=12000)

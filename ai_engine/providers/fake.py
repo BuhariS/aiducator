@@ -1,6 +1,6 @@
-from ai_engine.schemas import CourseGenerationResult, GradingResult
+from ai_engine.schemas import AnalyticsAnalysisResult, AnalyticsInsight, CourseGenerationResult, GradingResult
 
-from .base import CourseGenerationInput, ProviderCourseGeneration, ProviderGrade
+from .base import CourseGenerationInput, ProviderAnalyticsAnalysis, ProviderCourseGeneration, ProviderGrade
 
 
 class FakeGradingProvider:
@@ -17,6 +17,68 @@ class FakeGradingProvider:
             requires_review=True,
         )
         return ProviderGrade(result=result, provider="fake", model="local", response_id="fake-response")
+
+
+class FakeAnalyticsAnalyzer:
+    def analyze(self, metrics: dict) -> ProviderAnalyticsAnalysis:
+        courses = metrics.get("courses", [])
+        insights = []
+        for course in courses:
+            title = course["title"]
+            if course["completion_rate"] < 60:
+                insights.append(
+                    AnalyticsInsight(
+                        priority="high",
+                        title=f"Improve completion in {title}",
+                        evidence=f"Only {course['completion_rate']}% of {course['enrollment_count']} enrolled learners have completed the course.",
+                        action="Review the first unfinished lesson for each learner, then send a short check-in with one specific next step.",
+                    )
+                )
+            if course["students_needing_help"]:
+                insights.append(
+                    AnalyticsInsight(
+                        priority="high",
+                        title=f"Follow up with learners needing support in {title}",
+                        evidence=f"{course['students_needing_help']} learner(s) are flagged for support.",
+                        action="Open the support queue, group learners by the lesson or misconception involved, and schedule a targeted intervention.",
+                    )
+                )
+            if course["ai_human_gap"] >= 10:
+                insights.append(
+                    AnalyticsInsight(
+                        priority="medium",
+                        title=f"Review rubric alignment in {title}",
+                        evidence=f"The average AI-to-teacher score difference is {course['ai_human_gap']} points.",
+                        action="Compare the largest AI and teacher differences and clarify rubric language before the next assessment cycle.",
+                    )
+                )
+        if not insights:
+            insights.append(
+                AnalyticsInsight(
+                    priority="low",
+                    title="Keep monitoring learner momentum",
+                    evidence="No urgent threshold was detected in the current aggregate metrics.",
+                    action="Review this page weekly and act when completion, pass rate, or lesson drop-off begins to trend down.",
+                )
+            )
+        summary = (
+            f"Reviewed {len(courses)} course(s). The clearest opportunities are learner follow-up, assessment support, and monitoring progress trends."
+            if courses
+            else "There are no course metrics to analyze yet. Create or teach a course to unlock actionable insights."
+        )
+        return ProviderAnalyticsAnalysis(
+            result=AnalyticsAnalysisResult(
+                summary=summary,
+                insights=insights[:8],
+                next_steps=[
+                    "Start with the highest-priority insight and assign a clear owner.",
+                    "Recheck the affected metric after the next learner support or assessment cycle.",
+                ],
+            ),
+            provider="fake",
+            model="local",
+            response_id="fake-analytics-analysis",
+        )
 
 
 class FakeCourseGenerationProvider:

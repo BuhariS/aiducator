@@ -6,7 +6,7 @@ from django.urls import reverse
 from accounts.models import User
 from ai_engine.models import AIJob, CourseGenerationRequest
 from analytics.models import AuditEvent
-from enrollments.models import Enrollment
+from enrollments.models import CourseCompletion, Enrollment
 from organizations.models import Membership, Organization
 
 from .models import Course, CourseVersion, FinalProject, LessonArtifact, LessonVersion, Module
@@ -43,6 +43,84 @@ class CourseFlowTests(TestCase):
         response = self.client.post(reverse("courses:enroll", kwargs={"slug": self.course.slug}))
         self.assertRedirects(response, reverse("courses:learn", kwargs={"slug": self.course.slug}))
         self.assertEqual(self.course.enrollments.get().course_version, latest_version)
+
+    def test_student_can_unenroll_from_course(self):
+        enrollment = Enrollment.objects.create(
+            course=self.course,
+            course_version=self.course.versions.get(),
+            student=self.student,
+        )
+        self.client.force_login(self.student)
+        dashboard_response = self.client.get(reverse("dashboard:student-dashboard"))
+        self.assertContains(dashboard_response, "Unenroll")
+
+        response = self.client.post(reverse("courses:unenroll", kwargs={"slug": self.course.slug}))
+
+        self.assertRedirects(response, reverse("dashboard:student-dashboard"))
+        enrollment.refresh_from_db()
+        self.assertEqual(enrollment.status, Enrollment.Status.WITHDRAWN)
+        dashboard_response = self.client.get(reverse("dashboard:student-dashboard"))
+        self.assertNotContains(dashboard_response, self.course.title)
+
+    def test_student_can_reenroll_after_unenrolling(self):
+        Enrollment.objects.create(
+            course=self.course,
+            course_version=self.course.versions.get(),
+            student=self.student,
+            status=Enrollment.Status.WITHDRAWN,
+        )
+        self.client.force_login(self.student)
+
+        response = self.client.post(reverse("courses:enroll", kwargs={"slug": self.course.slug}))
+
+        self.assertRedirects(response, reverse("courses:learn", kwargs={"slug": self.course.slug}))
+        self.assertEqual(self.course.enrollments.get().status, Enrollment.Status.ACTIVE)
+
+    def test_next_button_opens_first_lesson_of_next_module(self):
+        learning_version = CourseVersion.objects.create(
+            course=self.course,
+            version_number=2,
+            status=CourseVersion.Status.DRAFT,
+        )
+        first_module = Module.objects.create(course_version=learning_version, title="Basics", position=1)
+        first_lesson = LessonVersion.objects.create(
+            module=first_module,
+            title="Variables",
+            objectives=["Use variables"],
+            content="Variables store values.",
+            position=1,
+            status=LessonVersion.Status.PUBLISHED,
+        )
+        next_module = Module.objects.create(course_version=learning_version, title="Control flow", position=2)
+        next_lesson = LessonVersion.objects.create(
+            module=next_module,
+            title="Conditions",
+            objectives=["Use conditions"],
+            content="Conditions choose paths.",
+            position=1,
+            status=LessonVersion.Status.PUBLISHED,
+        )
+        learning_version.status = CourseVersion.Status.PUBLISHED
+        learning_version.save(update_fields=["status"])
+        enrollment = Enrollment.objects.create(
+            course=self.course,
+            course_version=learning_version,
+            student=self.student,
+        )
+        CourseCompletion.objects.create(enrollment=enrollment, confirmed_by=self.student)
+        self.client.force_login(self.student)
+
+        response = self.client.get(
+            reverse("courses:learn-lesson", kwargs={"slug": self.course.slug, "lesson_id": first_lesson.id})
+        )
+
+        self.assertContains(response, "Learning objectives")
+        self.assertContains(response, "Congratulations — you completed Python Fundamentals!")
+        self.assertContains(response, "Next module")
+        self.assertContains(
+            response,
+            f'href="{reverse("courses:learn-lesson", kwargs={"slug": self.course.slug, "lesson_id": next_lesson.id})}"',
+        )
 
 
 class CourseAuthoringTests(TestCase):

@@ -17,7 +17,7 @@ class SignUpForm(UserCreationForm):
 
     role = forms.ChoiceField(
         choices=Role.choices,
-        initial=Role.STUDENT,
+        initial=Role.TEACHER,
         required=False,
         label="I am signing up as a",
     )
@@ -31,6 +31,7 @@ class SignUpForm(UserCreationForm):
     def __init__(self, *args, signup_role=None, **kwargs):
         self.signup_role = signup_role
         super().__init__(*args, **kwargs)
+        self.fields["first_name"].widget.attrs["autofocus"] = "autofocus"
         if signup_role:
             self.fields["role"].initial = signup_role
             self.fields["role"].widget = forms.HiddenInput()
@@ -42,7 +43,7 @@ class SignUpForm(UserCreationForm):
     def clean_role(self):
         if self.signup_role:
             return self.signup_role
-        return self.cleaned_data.get("role") or self.Role.STUDENT
+        return self.cleaned_data.get("role") or self.Role.TEACHER
 
     def clean(self):
         cleaned_data = super().clean()

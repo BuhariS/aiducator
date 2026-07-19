@@ -83,7 +83,10 @@ class AnalyticsAccessTests(TestCase):
 
     def test_teacher_and_admin_analytics_are_role_protected(self):
         self.client.force_login(self.teacher)
-        self.assertEqual(self.client.get(reverse("analytics:teacher")).status_code, 200)
+        teacher_response = self.client.get(reverse("analytics:teacher"))
+        self.assertEqual(teacher_response.status_code, 200)
+        self.assertContains(teacher_response, "How each metric is evaluated")
+        self.assertContains(teacher_response, "Analyze metrics")
 
         self.client.force_login(self.admin)
         response = self.client.get(reverse("analytics:administrator"))
@@ -93,6 +96,23 @@ class AnalyticsAccessTests(TestCase):
         self.client.force_login(self.student)
         self.assertEqual(self.client.get(reverse("analytics:teacher")).status_code, 403)
         self.assertEqual(self.client.get(reverse("analytics:administrator")).status_code, 403)
+
+    def test_teacher_can_trigger_ai_analyzer(self):
+        self.client.force_login(self.teacher)
+
+        response = self.client.post(reverse("analytics:teacher-analyze"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Analysis ready")
+        self.assertContains(response, "Actionable insights")
+        self.assertContains(response, "Suggested next steps")
+
+    def test_student_cannot_trigger_teacher_ai_analyzer(self):
+        self.client.force_login(self.student)
+
+        response = self.client.post(reverse("analytics:teacher-analyze"))
+
+        self.assertEqual(response.status_code, 403)
 
     def test_teacher_metrics_use_completion_and_time_events(self):
         LessonProgress.objects.create(

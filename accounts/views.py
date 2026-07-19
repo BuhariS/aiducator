@@ -1,6 +1,6 @@
 import uuid
 
-from django.contrib.auth import login
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import LoginView
 from django.db import transaction
@@ -23,7 +23,7 @@ class SignInView(LoginView):
 class SignUpView(CreateView):
     form_class = SignUpForm
     template_name = "registration/signup.html"
-    success_url = reverse_lazy("accounts:dashboard")
+    success_url = reverse_lazy("accounts:login")
     signup_role = None
 
     def get_form_kwargs(self):
@@ -49,7 +49,7 @@ class SignUpView(CreateView):
                 user=self.object,
                 role=membership_role,
             )
-        login(self.request, self.object)
+        messages.success(self.request, "Account created. Sign in to start learning with Aiducator.")
         return redirect(self.get_success_url())
 
 
@@ -73,4 +73,5 @@ def dashboard(request):
 
 @login_required
 def profile(request):
-    return render(request, "accounts/profile.html")
+    memberships = request.user.memberships.select_related("organization").order_by("organization__name")
+    return render(request, "accounts/profile.html", {"memberships": memberships})

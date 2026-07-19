@@ -14,6 +14,7 @@ from ai_engine.rate_limit import rate_limit
 from ai_engine.tasks import grade_attempt
 from analytics.security import record_audit_event
 from accounts.access import user_has_teacher_access, user_is_teacher
+from courses.models import Module
 from enrollments.models import Enrollment
 from notifications.models import Notification
 from organizations.models import Membership
@@ -164,13 +165,27 @@ def decide_accommodation(request, request_id):
 @login_required
 def attempt_status(request, attempt_id):
     attempt = get_object_or_404(
-        Attempt.objects.select_related("question", "enrollment__course"),
+        Attempt.objects.select_related(
+            "question__lesson_version__module",
+            "enrollment__course",
+            "enrollment__course_version",
+        ),
         id=attempt_id,
         enrollment__student=request.user,
     )
     job = AIJob.objects.filter(entity_type="attempt", entity_id=attempt.id).order_by("-created_at").first()
     grade_decision = getattr(attempt, "grade_decision", None)
     attempts_used = Attempt.objects.filter(enrollment=attempt.enrollment, question=attempt.question).count()
+    next_module = (
+        Module.objects.filter(
+            course_version=attempt.enrollment.course_version,
+            position__gt=attempt.question.lesson_version.module.position,
+        )
+        .order_by("position")
+        .prefetch_related("lessons")
+        .first()
+    )
+    next_module_lesson = next_module.lessons.first() if next_module else None
     return render(
         request,
         "assessments/status.html",
@@ -184,6 +199,7 @@ def attempt_status(request, attempt_id):
                 and grade_decision.final_score < attempt.enrollment.course.passing_score
                 and attempts_used < attempt.enrollment.course.max_retries + 1
             ),
+            "next_module_lesson": next_module_lesson,
         },
     )
 
@@ -244,6 +260,7 @@ def review_queue(request):
             "attempt__ai_grade",
         )
         .order_by("created_at")
+        .distinct()
     )
     return render(request, "assessments/review_queue.html", {"review_items": items})
 
