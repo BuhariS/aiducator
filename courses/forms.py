@@ -118,7 +118,7 @@ class ModuleForm(forms.ModelForm):
 class ArtifactForm(forms.ModelForm):
     class Meta:
         model = LessonArtifact
-        fields = ("artifact_type", "content", "asset", "position", "is_active", "teacher_approved")
+        fields = ("artifact_type", "content", "asset", "position", "is_active")
         widgets = {
             "content": forms.Textarea(
                 attrs={"rows": 6, "placeholder": "Add text, a URL, or embed reference..."}

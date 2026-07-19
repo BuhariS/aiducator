@@ -6,6 +6,7 @@ from django.urls import reverse
 from accounts.models import User
 from ai_engine.models import AIJob, CourseGenerationRequest
 from analytics.models import AuditEvent
+from assessments.models import Question, RubricVersion
 from enrollments.models import CourseCompletion, Enrollment
 from organizations.models import Membership, Organization
 
@@ -209,6 +210,55 @@ class CourseAuthoringTests(TestCase):
             ),
         )
 
+    def test_teacher_can_edit_module_and_continue_to_first_lesson(self):
+        version = CourseVersion.objects.create(course=self.course, version_number=1, status=CourseVersion.Status.DRAFT)
+        module = Module.objects.create(course_version=version, title="Original theme", position=1)
+        lesson = LessonVersion.objects.create(module=module, title="First lesson", content="Draft.", position=1)
+
+        response = self.client.get(
+            reverse(
+                "teacher_courses:edit-module",
+                kwargs={"slug": self.course.slug, "version_id": version.id, "module_id": module.id},
+            )
+        )
+        self.assertContains(response, "Edit module")
+
+        response = self.client.post(
+            reverse(
+                "teacher_courses:edit-module",
+                kwargs={"slug": self.course.slug, "version_id": version.id, "module_id": module.id},
+            ),
+            {"title": "Updated theme", "position": 1, "next": "lesson"},
+        )
+        self.assertRedirects(
+            response,
+            reverse(
+                "teacher_courses:edit-lesson",
+                kwargs={
+                    "slug": self.course.slug,
+                    "version_id": version.id,
+                    "module_id": module.id,
+                    "lesson_id": lesson.id,
+                },
+            ),
+        )
+        module.refresh_from_db()
+        self.assertEqual(module.title, "Updated theme")
+
+        response = self.client.get(
+            reverse(
+                "teacher_courses:edit-lesson",
+                kwargs={
+                    "slug": self.course.slug,
+                    "version_id": version.id,
+                    "module_id": module.id,
+                    "lesson_id": lesson.id,
+                },
+            )
+        )
+        self.assertContains(response, "Save lesson and view course builder")
+        self.assertNotContains(response, "Save and add assessment")
+
     def test_teacher_can_edit_course_setup_before_publishing(self):
         response = self.client.post(
             reverse("teacher_courses:settings", kwargs={"slug": self.course.slug}),
@@ -369,6 +419,325 @@ class CourseAuthoringTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Welcome")
 
+    def test_teacher_can_remove_draft_material_and_assessment(self):
+        version = CourseVersion.objects.create(course=self.course, version_number=1, status=CourseVersion.Status.DRAFT)
+        module = Module.objects.create(course_version=version, title="Getting started", position=1)
+        lesson = LessonVersion.objects.create(module=module, title="Welcome", content="Welcome.", position=1)
+        artifact = LessonArtifact.objects.create(
+            lesson_version=lesson,
+            artifact_type=LessonArtifact.ArtifactType.TEXT,
+            content="Read this first.",
+        )
+        question = Question.objects.create(
+            lesson_version=lesson,
+            question_type=Question.QuestionType.EXPLANATION,
+            prompt="Explain the welcome lesson.",
+        )
+        rubric = RubricVersion.objects.create(
+            question=question,
+            version_number=1,
+            criteria=[{"criterion": "Uses a clear explanation.", "weight": 100}],
+        )
+
+        editor_response = self.client.get(
+            reverse("teacher_courses:version-editor", kwargs={"slug": self.course.slug, "version_id": version.id})
+        )
+        self.assertContains(
+            editor_response,
+            reverse(
+                "teacher_courses:edit-artifact",
+                kwargs={
+                    "slug": self.course.slug,
+                    "version_id": version.id,
+                    "lesson_id": lesson.id,
+                    "artifact_id": artifact.id,
+                },
+            ),
+        )
+        self.assertContains(
+            editor_response,
+            reverse(
+                "teacher_courses:delete-artifact",
+                kwargs={
+                    "slug": self.course.slug,
+                    "version_id": version.id,
+                    "lesson_id": lesson.id,
+                    "artifact_id": artifact.id,
+                },
+            ),
+        )
+        self.assertContains(
+            editor_response,
+            reverse(
+                "teacher_courses:edit-question",
+                kwargs={
+                    "slug": self.course.slug,
+                    "version_id": version.id,
+                    "lesson_id": lesson.id,
+                    "question_id": question.id,
+                },
+            ),
+        )
+        self.assertContains(
+            editor_response,
+            reverse(
+                "teacher_courses:delete-question",
+                kwargs={
+                    "slug": self.course.slug,
+                    "version_id": version.id,
+                    "lesson_id": lesson.id,
+                    "question_id": question.id,
+                },
+            ),
+        )
+        self.assertNotContains(editor_response, "Rubric ready")
+        self.assertContains(
+            editor_response,
+            reverse(
+                "teacher_courses:delete-artifacts",
+                kwargs={"slug": self.course.slug, "version_id": version.id, "lesson_id": lesson.id},
+            ),
+        )
+        self.assertContains(
+            editor_response,
+            reverse(
+                "teacher_courses:delete-questions",
+                kwargs={"slug": self.course.slug, "version_id": version.id, "lesson_id": lesson.id},
+            ),
+        )
+
+        response = self.client.post(
+            reverse(
+                "teacher_courses:delete-artifact",
+                kwargs={
+                    "slug": self.course.slug,
+                    "version_id": version.id,
+                    "lesson_id": lesson.id,
+                    "artifact_id": artifact.id,
+                },
+            )
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response.url,
+            f'{reverse("teacher_courses:version-editor", kwargs={"slug": self.course.slug, "version_id": version.id})}#lesson-{lesson.id}-materials',
+        )
+        self.assertFalse(LessonArtifact.objects.filter(id=artifact.id).exists())
+
+        response = self.client.post(
+            reverse(
+                "teacher_courses:delete-question",
+                kwargs={
+                    "slug": self.course.slug,
+                    "version_id": version.id,
+                    "lesson_id": lesson.id,
+                    "question_id": question.id,
+                },
+            )
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response.url,
+            f'{reverse("teacher_courses:version-editor", kwargs={"slug": self.course.slug, "version_id": version.id})}#lesson-{lesson.id}-assessments',
+        )
+        self.assertFalse(Question.objects.filter(id=question.id).exists())
+        self.assertFalse(RubricVersion.objects.filter(id=rubric.id).exists())
+
+    def test_teacher_can_remove_draft_modules_and_lessons(self):
+        version = CourseVersion.objects.create(course=self.course, version_number=1, status=CourseVersion.Status.DRAFT)
+        first_module = Module.objects.create(course_version=version, title="Remove me", position=1)
+        LessonVersion.objects.create(module=first_module, title="Removed with module", content="Draft.", position=1)
+        remaining_module = Module.objects.create(course_version=version, title="Keep me", position=2)
+        lesson_to_remove = LessonVersion.objects.create(
+            module=remaining_module,
+            title="Remove this lesson",
+            content="Draft.",
+            position=1,
+        )
+        remaining_lesson = LessonVersion.objects.create(
+            module=remaining_module,
+            title="Keep this lesson",
+            content="Draft.",
+            position=2,
+        )
+
+        editor_response = self.client.get(
+            reverse("teacher_courses:version-editor", kwargs={"slug": self.course.slug, "version_id": version.id})
+        )
+        self.assertContains(
+            editor_response,
+            reverse(
+                "teacher_courses:delete-module",
+                kwargs={"slug": self.course.slug, "version_id": version.id, "module_id": first_module.id},
+            ),
+        )
+        self.assertContains(
+            editor_response,
+            reverse(
+                "teacher_courses:delete-lesson",
+                kwargs={
+                    "slug": self.course.slug,
+                    "version_id": version.id,
+                    "module_id": remaining_module.id,
+                    "lesson_id": lesson_to_remove.id,
+                },
+            ),
+        )
+
+        response = self.client.post(
+            reverse(
+                "teacher_courses:delete-module",
+                kwargs={"slug": self.course.slug, "version_id": version.id, "module_id": first_module.id},
+            )
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response.url,
+            f'{reverse("teacher_courses:version-editor", kwargs={"slug": self.course.slug, "version_id": version.id})}#lessons',
+        )
+        self.assertFalse(Module.objects.filter(id=first_module.id).exists())
+        remaining_module.refresh_from_db()
+        self.assertEqual(remaining_module.position, 1)
+
+        response = self.client.post(
+            reverse(
+                "teacher_courses:delete-lesson",
+                kwargs={
+                    "slug": self.course.slug,
+                    "version_id": version.id,
+                    "module_id": remaining_module.id,
+                    "lesson_id": lesson_to_remove.id,
+                },
+            )
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response.url,
+            f'{reverse("teacher_courses:version-editor", kwargs={"slug": self.course.slug, "version_id": version.id})}#module-{remaining_module.id}',
+        )
+        self.assertFalse(LessonVersion.objects.filter(id=lesson_to_remove.id).exists())
+        remaining_lesson.refresh_from_db()
+        self.assertEqual(remaining_lesson.position, 1)
+
+    def test_teacher_can_remove_multiple_draft_materials_and_assessments(self):
+        version = CourseVersion.objects.create(course=self.course, version_number=1, status=CourseVersion.Status.DRAFT)
+        module = Module.objects.create(course_version=version, title="Getting started", position=1)
+        lesson = LessonVersion.objects.create(module=module, title="Welcome", content="Welcome.", position=1)
+        first_artifact = LessonArtifact.objects.create(
+            lesson_version=lesson,
+            artifact_type=LessonArtifact.ArtifactType.TEXT,
+            content="Read this first.",
+        )
+        second_artifact = LessonArtifact.objects.create(
+            lesson_version=lesson,
+            artifact_type=LessonArtifact.ArtifactType.CODE,
+            content="print('Hello')",
+        )
+        first_question = Question.objects.create(
+            lesson_version=lesson,
+            question_type=Question.QuestionType.EXPLANATION,
+            prompt="Explain the lesson.",
+        )
+        second_question = Question.objects.create(
+            lesson_version=lesson,
+            question_type=Question.QuestionType.REFLECTION,
+            prompt="Reflect on the lesson.",
+        )
+        first_rubric = RubricVersion.objects.create(
+            question=first_question,
+            version_number=1,
+            criteria=[{"criterion": "Explains the topic.", "weight": 100}],
+        )
+        second_rubric = RubricVersion.objects.create(
+            question=second_question,
+            version_number=1,
+            criteria=[{"criterion": "Reflects on learning.", "weight": 100}],
+        )
+
+        editor_response = self.client.get(
+            reverse("teacher_courses:version-editor", kwargs={"slug": self.course.slug, "version_id": version.id})
+        )
+        self.assertLess(
+            editor_response.content.find(f'id="lesson-{lesson.id}-materials"'.encode()),
+            editor_response.content.find(f'id="lesson-{lesson.id}-assessments"'.encode()),
+        )
+        self.assertContains(editor_response, 'name="artifact_ids"', count=2)
+        self.assertContains(editor_response, 'name="question_ids"', count=2)
+
+        response = self.client.post(
+            reverse(
+                "teacher_courses:delete-artifacts",
+                kwargs={"slug": self.course.slug, "version_id": version.id, "lesson_id": lesson.id},
+            ),
+            {"artifact_ids": [str(first_artifact.id), str(second_artifact.id)]},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response.url,
+            f'{reverse("teacher_courses:version-editor", kwargs={"slug": self.course.slug, "version_id": version.id})}#lesson-{lesson.id}-materials',
+        )
+        self.assertFalse(LessonArtifact.objects.filter(id__in=[first_artifact.id, second_artifact.id]).exists())
+
+        response = self.client.post(
+            reverse(
+                "teacher_courses:delete-questions",
+                kwargs={"slug": self.course.slug, "version_id": version.id, "lesson_id": lesson.id},
+            ),
+            {"question_ids": [str(first_question.id), str(second_question.id)]},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response.url,
+            f'{reverse("teacher_courses:version-editor", kwargs={"slug": self.course.slug, "version_id": version.id})}#lesson-{lesson.id}-assessments',
+        )
+        self.assertFalse(Question.objects.filter(id__in=[first_question.id, second_question.id]).exists())
+        self.assertFalse(RubricVersion.objects.filter(id__in=[first_rubric.id, second_rubric.id]).exists())
+
+
+    def test_material_and_assessment_removal_is_rejected_for_published_version(self):
+        version = CourseVersion.objects.create(course=self.course, version_number=1, status=CourseVersion.Status.DRAFT)
+        module = Module.objects.create(course_version=version, title="Getting started", position=1)
+        lesson = LessonVersion.objects.create(module=module, title="Welcome", content="Welcome.", position=1)
+        artifact = LessonArtifact.objects.create(
+            lesson_version=lesson,
+            artifact_type=LessonArtifact.ArtifactType.TEXT,
+            content="Read this first.",
+        )
+        question = Question.objects.create(
+            lesson_version=lesson,
+            question_type=Question.QuestionType.EXPLANATION,
+            prompt="Explain the welcome lesson.",
+        )
+        version.status = CourseVersion.Status.PUBLISHED
+        version.save(update_fields=["status"])
+
+        artifact_response = self.client.post(
+            reverse(
+                "teacher_courses:delete-artifact",
+                kwargs={
+                    "slug": self.course.slug,
+                    "version_id": version.id,
+                    "lesson_id": lesson.id,
+                    "artifact_id": artifact.id,
+                },
+            )
+        )
+        question_response = self.client.post(
+            reverse(
+                "teacher_courses:delete-question",
+                kwargs={
+                    "slug": self.course.slug,
+                    "version_id": version.id,
+                    "lesson_id": lesson.id,
+                    "question_id": question.id,
+                },
+            )
+        )
+        self.assertEqual(artifact_response.status_code, 403)
+        self.assertEqual(question_response.status_code, 403)
+        self.assertTrue(LessonArtifact.objects.filter(id=artifact.id).exists())
+        self.assertTrue(Question.objects.filter(id=question.id).exists())
+
 
 class StudentProgressionTests(TestCase):
     def setUp(self):
@@ -470,19 +839,24 @@ class CourseGenerationTests(TestCase):
         )
         self.assertRedirects(
             publish_response,
-            reverse(
-                "teacher_courses:version-editor",
-                kwargs={"slug": version.course.slug, "version_id": version.id},
-            ),
+            reverse("teacher_courses:studio", kwargs={"slug": version.course.slug}),
         )
         version.refresh_from_db()
-        self.assertEqual(version.status, CourseVersion.Status.DRAFT)
+        self.assertEqual(version.status, CourseVersion.Status.PUBLISHED)
+        self.assertTrue(
+            version.modules.first().lessons.first().artifacts.filter(
+                ai_generated=True,
+                teacher_approved=True,
+            ).exists()
+        )
+        version.final_project.refresh_from_db()
+        self.assertTrue(version.final_project.teacher_approved)
 
         status_response = self.client.get(
             reverse("teacher_courses:generation-status", kwargs={"request_id": generation_request.id})
         )
-        self.assertContains(status_response, "Draft ready for teacher review.")
-        self.assertContains(status_response, "Review draft in Course Studio")
+        self.assertContains(status_response, "Course published and approved.")
+        self.assertContains(status_response, "Open course studio")
 
     def test_teacher_can_create_and_edit_a_manual_final_project(self):
         course = Course.objects.create(

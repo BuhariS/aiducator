@@ -7,7 +7,13 @@ from courses.views import (
     course_settings,
     create_course,
     create_course_version,
+    delete_artifact,
+    delete_artifacts,
     delete_course,
+    delete_lesson,
+    delete_module,
+    delete_question,
+    delete_questions,
     final_project_form,
     generate_course,
     generation_status,
@@ -42,6 +48,16 @@ urlpatterns = [
     ),
     path("<slug:slug>/studio/versions/<uuid:version_id>/modules/add/", add_module, name="add-module"),
     path(
+        "<slug:slug>/studio/versions/<uuid:version_id>/modules/<uuid:module_id>/delete/",
+        delete_module,
+        name="delete-module",
+    ),
+    path(
+        "<slug:slug>/studio/versions/<uuid:version_id>/modules/<uuid:module_id>/edit/",
+        add_module,
+        name="edit-module",
+    ),
+    path(
         "<slug:slug>/studio/versions/<uuid:version_id>/modules/<uuid:module_id>/lessons/new/",
         lesson_form,
         name="create-lesson",
@@ -50,6 +66,11 @@ urlpatterns = [
         "<slug:slug>/studio/versions/<uuid:version_id>/modules/<uuid:module_id>/lessons/<uuid:lesson_id>/edit/",
         lesson_form,
         name="edit-lesson",
+    ),
+    path(
+        "<slug:slug>/studio/versions/<uuid:version_id>/modules/<uuid:module_id>/lessons/<uuid:lesson_id>/delete/",
+        delete_lesson,
+        name="delete-lesson",
     ),
     path(
         "<slug:slug>/studio/versions/<uuid:version_id>/lessons/<uuid:lesson_id>/artifacts/new/",
@@ -62,6 +83,16 @@ urlpatterns = [
         name="edit-artifact",
     ),
     path(
+        "<slug:slug>/studio/versions/<uuid:version_id>/lessons/<uuid:lesson_id>/artifacts/<uuid:artifact_id>/delete/",
+        delete_artifact,
+        name="delete-artifact",
+    ),
+    path(
+        "<slug:slug>/studio/versions/<uuid:version_id>/lessons/<uuid:lesson_id>/artifacts/delete/",
+        delete_artifacts,
+        name="delete-artifacts",
+    ),
+    path(
         "<slug:slug>/studio/versions/<uuid:version_id>/lessons/<uuid:lesson_id>/questions/new/",
         question_form,
         name="create-question",
@@ -70,6 +101,16 @@ urlpatterns = [
         "<slug:slug>/studio/versions/<uuid:version_id>/lessons/<uuid:lesson_id>/questions/<uuid:question_id>/edit/",
         question_form,
         name="edit-question",
+    ),
+    path(
+        "<slug:slug>/studio/versions/<uuid:version_id>/lessons/<uuid:lesson_id>/questions/<uuid:question_id>/delete/",
+        delete_question,
+        name="delete-question",
+    ),
+    path(
+        "<slug:slug>/studio/versions/<uuid:version_id>/lessons/<uuid:lesson_id>/questions/delete/",
+        delete_questions,
+        name="delete-questions",
     ),
     path("<slug:slug>/studio/versions/<uuid:version_id>/publish/", publish_version, name="publish-version"),
 ]

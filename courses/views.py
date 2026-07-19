@@ -1,3 +1,5 @@
+import uuid
+
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -6,6 +8,7 @@ from django.db import transaction
 from django.db.models import Avg
 from django.http import Http404, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods, require_POST
@@ -485,6 +488,14 @@ def _get_editable_version(request, slug, version_id):
     return course, version, None
 
 
+def _editor_redirect(course, version, anchor):
+    editor_url = reverse(
+        "teacher_courses:version-editor",
+        kwargs={"slug": course.slug, "version_id": version.id},
+    )
+    return redirect(f"{editor_url}#{anchor}")
+
+
 @login_required
 def version_editor(request, slug, version_id):
     course, version, error = _get_editable_version(request, slug, version_id)
@@ -519,25 +530,83 @@ def version_editor(request, slug, version_id):
 
 @login_required
 @require_http_methods(["GET", "POST"])
-def add_module(request, slug, version_id):
+def add_module(request, slug, version_id, module_id=None):
     course, version, error = _get_editable_version(request, slug, version_id)
     if error:
         return error
-    form = ModuleForm(request.POST or None, initial={"position": version.modules.count() + 1})
+    module = get_object_or_404(Module, id=module_id, course_version=version) if module_id else None
+    form = ModuleForm(
+        request.POST or None,
+        instance=module,
+        initial={"position": version.modules.count() + 1} if module is None else None,
+    )
     if request.method == "POST" and form.is_valid():
-        module = form.save(commit=False)
-        module.course_version = version
-        module.save()
-        messages.success(request, "Module added to the draft version.")
+        saved_module = form.save(commit=False)
+        saved_module.course_version = version
+        saved_module.save()
+        messages.success(request, "Module saved to the draft version.")
         if request.POST.get("next") == "lesson":
+            first_lesson = saved_module.lessons.order_by("position").first()
+            if first_lesson:
+                return redirect(
+                    "teacher_courses:edit-lesson",
+                    slug=course.slug,
+                    version_id=version.id,
+                    module_id=saved_module.id,
+                    lesson_id=first_lesson.id,
+                )
             return redirect(
                 "teacher_courses:create-lesson",
                 slug=course.slug,
                 version_id=version.id,
-                module_id=module.id,
+                module_id=saved_module.id,
             )
         return redirect("teacher_courses:version-editor", slug=course.slug, version_id=version.id)
-    return render(request, "courses/module_form.html", {"course": course, "version": version, "form": form})
+    return render(
+        request,
+        "courses/module_form.html",
+        {"course": course, "version": version, "module": module, "form": form},
+    )
+
+
+def _renumber_modules(version):
+    for position, module in enumerate(version.modules.order_by("position"), start=1):
+        if module.position != position:
+            module.position = position
+            module.save(update_fields=["position"])
+
+
+def _renumber_lessons(module):
+    for position, lesson in enumerate(module.lessons.order_by("position"), start=1):
+        if lesson.position != position:
+            lesson.position = position
+            lesson.save(update_fields=["position"])
+
+
+@login_required
+@require_POST
+def delete_module(request, slug, version_id, module_id):
+    course, version, error = _get_editable_version(request, slug, version_id)
+    if error:
+        return error
+    module = get_object_or_404(Module, id=module_id, course_version=version)
+    if Attempt.objects.filter(question__lesson_version__module=module).exists():
+        messages.error(request, "This module has learner assessment attempts and cannot be removed.")
+        return _editor_redirect(course, version, f"module-{module.id}")
+    module_title = module.title
+    lesson_count = module.lessons.count()
+    with transaction.atomic():
+        record_audit_event(
+            action="course_module_deleted",
+            actor=request.user,
+            obj=module,
+            request=request,
+            metadata={"course_id": str(course.id), "version_id": str(version.id), "lesson_count": lesson_count},
+        )
+        module.delete()
+        _renumber_modules(version)
+    messages.success(request, f'Module "{module_title}" and its {lesson_count} lesson(s) were removed.')
+    return _editor_redirect(course, version, "lessons")
 
 
 @login_required
@@ -570,6 +639,68 @@ def artifact_form(request, slug, version_id, lesson_id, artifact_id=None):
 
 
 @login_required
+@require_POST
+def delete_artifact(request, slug, version_id, lesson_id, artifact_id):
+    course, version, error = _get_editable_version(request, slug, version_id)
+    if error:
+        return error
+    lesson = get_object_or_404(LessonVersion, id=lesson_id, module__course_version=version)
+    artifact = get_object_or_404(LessonArtifact, id=artifact_id, lesson_version=lesson)
+    artifact_type = artifact.get_artifact_type_display()
+    record_audit_event(
+        action="lesson_artifact_deleted",
+        actor=request.user,
+        obj=artifact,
+        request=request,
+        metadata={"course_id": str(course.id), "version_id": str(version.id), "lesson_id": str(lesson.id)},
+    )
+    artifact.delete()
+    messages.success(request, f"{artifact_type} material removed from the draft version.")
+    return _editor_redirect(course, version, f"lesson-{lesson.id}-materials")
+
+
+def _selected_ids(request, field_name):
+    selected_ids = []
+    for value in request.POST.getlist(field_name):
+        try:
+            selected_id = uuid.UUID(value)
+        except (AttributeError, TypeError, ValueError):
+            continue
+        if selected_id not in selected_ids:
+            selected_ids.append(selected_id)
+    return selected_ids
+
+
+@login_required
+@require_POST
+def delete_artifacts(request, slug, version_id, lesson_id):
+    course, version, error = _get_editable_version(request, slug, version_id)
+    if error:
+        return error
+    lesson = get_object_or_404(LessonVersion, id=lesson_id, module__course_version=version)
+    selected_ids = _selected_ids(request, "artifact_ids")
+    if not selected_ids:
+        messages.error(request, "Select at least one learning material to remove.")
+        return _editor_redirect(course, version, f"lesson-{lesson.id}-materials")
+    artifacts = LessonArtifact.objects.filter(lesson_version=lesson, id__in=selected_ids)
+    artifact_count = artifacts.count()
+    if not artifact_count:
+        messages.error(request, "The selected learning materials are no longer available.")
+        return _editor_redirect(course, version, f"lesson-{lesson.id}-materials")
+    with transaction.atomic():
+        record_audit_event(
+            action="lesson_artifacts_deleted",
+            actor=request.user,
+            obj=lesson,
+            request=request,
+            metadata={"course_id": str(course.id), "version_id": str(version.id), "artifact_count": artifact_count},
+        )
+        artifacts.delete()
+    messages.success(request, f"{artifact_count} learning material(s) removed from the draft version.")
+    return _editor_redirect(course, version, f"lesson-{lesson.id}-materials")
+
+
+@login_required
 @require_http_methods(["GET", "POST"])
 def lesson_form(request, slug, version_id, module_id, lesson_id=None):
     course, version, error = _get_editable_version(request, slug, version_id)
@@ -599,6 +730,32 @@ def lesson_form(request, slug, version_id, module_id, lesson_id=None):
         "courses/lesson_form.html",
         {"course": course, "version": version, "module": module, "lesson": lesson, "form": form},
     )
+
+
+@login_required
+@require_POST
+def delete_lesson(request, slug, version_id, module_id, lesson_id):
+    course, version, error = _get_editable_version(request, slug, version_id)
+    if error:
+        return error
+    module = get_object_or_404(Module, id=module_id, course_version=version)
+    lesson = get_object_or_404(LessonVersion, id=lesson_id, module=module)
+    if Attempt.objects.filter(question__lesson_version=lesson).exists():
+        messages.error(request, "This lesson has learner assessment attempts and cannot be removed.")
+        return _editor_redirect(course, version, f"lesson-{lesson.id}")
+    lesson_title = lesson.title
+    with transaction.atomic():
+        record_audit_event(
+            action="course_lesson_deleted",
+            actor=request.user,
+            obj=lesson,
+            request=request,
+            metadata={"course_id": str(course.id), "version_id": str(version.id), "module_id": str(module.id)},
+        )
+        lesson.delete()
+        _renumber_lessons(module)
+    messages.success(request, f'Lesson "{lesson_title}" was removed from the draft version.')
+    return _editor_redirect(course, version, f"module-{module.id}")
 
 
 @login_required
@@ -655,6 +812,61 @@ def question_form(request, slug, version_id, lesson_id, question_id=None):
 
 @login_required
 @require_POST
+def delete_question(request, slug, version_id, lesson_id, question_id):
+    course, version, error = _get_editable_version(request, slug, version_id)
+    if error:
+        return error
+    lesson = get_object_or_404(LessonVersion, id=lesson_id, module__course_version=version)
+    question = get_object_or_404(Question, id=question_id, lesson_version=lesson)
+    if question.attempts.exists():
+        messages.error(request, "This assessment has learner attempts and cannot be removed.")
+        return _editor_redirect(course, version, f"lesson-{lesson.id}-assessments")
+    record_audit_event(
+        action="lesson_question_deleted",
+        actor=request.user,
+        obj=question,
+        request=request,
+        metadata={"course_id": str(course.id), "version_id": str(version.id), "lesson_id": str(lesson.id)},
+    )
+    question.delete()
+    messages.success(request, "Assessment and its rubric removed from the draft version.")
+    return _editor_redirect(course, version, f"lesson-{lesson.id}-assessments")
+
+
+@login_required
+@require_POST
+def delete_questions(request, slug, version_id, lesson_id):
+    course, version, error = _get_editable_version(request, slug, version_id)
+    if error:
+        return error
+    lesson = get_object_or_404(LessonVersion, id=lesson_id, module__course_version=version)
+    selected_ids = _selected_ids(request, "question_ids")
+    if not selected_ids:
+        messages.error(request, "Select at least one assessment to remove.")
+        return _editor_redirect(course, version, f"lesson-{lesson.id}-assessments")
+    questions = Question.objects.filter(lesson_version=lesson, id__in=selected_ids)
+    question_count = questions.count()
+    if not question_count:
+        messages.error(request, "The selected assessments are no longer available.")
+        return _editor_redirect(course, version, f"lesson-{lesson.id}-assessments")
+    if Attempt.objects.filter(question__in=questions).exists():
+        messages.error(request, "One or more selected assessments have learner attempts and cannot be removed.")
+        return _editor_redirect(course, version, f"lesson-{lesson.id}-assessments")
+    with transaction.atomic():
+        record_audit_event(
+            action="lesson_questions_deleted",
+            actor=request.user,
+            obj=lesson,
+            request=request,
+            metadata={"course_id": str(course.id), "version_id": str(version.id), "question_count": question_count},
+        )
+        questions.delete()
+    messages.success(request, f"{question_count} assessment(s) and their rubrics removed from the draft version.")
+    return _editor_redirect(course, version, f"lesson-{lesson.id}-assessments")
+
+
+@login_required
+@require_POST
 @csrf_protect
 def publish_version(request, slug, version_id):
     course, version, error = _get_editable_version(request, slug, version_id)
@@ -678,6 +890,10 @@ def publish_version(request, slug, version_id):
         version.save(update_fields=["status", "approved_by", "approved_at"])
         course.status = Course.Status.PUBLISHED
         course.save(update_fields=["status", "updated_at"])
+        LessonArtifact.objects.filter(
+            lesson_version__module__course_version=version,
+            ai_generated=True,
+        ).update(teacher_approved=True)
         FinalProject.objects.filter(course_version=version).update(teacher_approved=True)
         CourseGenerationRequest.objects.filter(generated_version=version).update(
             status=CourseGenerationRequest.Status.PUBLISHED,
@@ -713,9 +929,4 @@ def _version_validation_errors(version, modules=None):
                 rubric = question.rubrics.order_by("-version_number").first()
                 if not rubric or not rubric.criteria:
                     validation_errors.append(f"Assessment '{question.prompt[:60]}' needs a rubric.")
-            for artifact in lesson.artifacts.all():
-                if artifact.ai_generated and not artifact.teacher_approved:
-                    validation_errors.append(
-                        f"AI-generated material '{artifact.get_artifact_type_display()}' in '{lesson.title}' needs teacher approval."
-                    )
     return validation_errors
