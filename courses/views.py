@@ -3,6 +3,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Q
 from django.http import Http404, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -37,8 +38,15 @@ from .services import create_draft_version
 
 
 def catalog(request):
+    query = request.GET.get("q", "").strip()[:100]
     courses = Course.objects.filter(status=Course.Status.PUBLISHED).select_related("organization", "created_by")
-    return render(request, "courses/catalog.html", {"courses": courses})
+    if query:
+        courses = courses.filter(
+            Q(title__icontains=query)
+            | Q(description__icontains=query)
+            | Q(organization__name__icontains=query)
+        )
+    return render(request, "courses/catalog.html", {"courses": courses, "query": query})
 
 
 @login_required

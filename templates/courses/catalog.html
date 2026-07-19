@@ -11,7 +11,7 @@
   </div>
 </section>
 <section class="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-  <div class="mb-8 flex items-end justify-between"><div><p class="text-sm font-bold uppercase tracking-wider text-emerald">Explore learning</p><h2 class="mt-2 text-2xl font-black text-ink">Available courses</h2></div></div>
+  <div class="mb-8 flex flex-col justify-between gap-5 sm:flex-row sm:items-end"><div><p class="text-sm font-bold uppercase tracking-wider text-emerald">Explore learning</p><h2 class="mt-2 text-2xl font-black text-ink">Available courses</h2>{% if query %}<p class="mt-2 text-sm text-slate-500">Showing {{ courses|length }} result{{ courses|pluralize }} for “{{ query }}”.</p>{% endif %}</div><form class="w-full sm:max-w-md" action="{% url 'courses:catalog' %}" method="get" role="search"><label class="sr-only" for="course-search">Search courses</label><div class="flex gap-2"><div class="relative grow"><span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">{% include "components/icon.html" with icon="search" icon_class="h-5 w-5" %}</span><input class="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-ink outline-none transition placeholder:text-slate-400 focus:border-emerald focus:ring-2 focus:ring-emerald/20" id="course-search" maxlength="100" name="q" placeholder="Search courses" type="search" value="{{ query }}"></div><button class="primary-button shrink-0" type="submit">Search</button>{% if query %}<a aria-label="Clear course search" class="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-3 text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-ink" href="{% url 'courses:catalog' %}">{% include "components/icon.html" with icon="x" icon_class="h-4 w-4" %}</a>{% endif %}</div></form></div>
   {% if courses %}
     <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
       {% for course in courses %}
@@ -22,7 +22,7 @@
       {% endfor %}
     </div>
   {% else %}
-    <div class="surface-card p-10 text-center"><p class="text-lg font-bold text-ink">Courses are being prepared.</p><p class="mt-2 text-slate-500">Check back soon for the first Aiducator learning experience.</p></div>
+    <div class="surface-card p-10 text-center">{% if query %}<p class="text-lg font-bold text-ink">No courses match your search.</p><p class="mt-2 text-slate-500">Try a different course title, topic, or school name.</p><a class="mt-5 inline-flex items-center gap-2 text-sm font-bold text-emerald hover:underline" href="{% url 'courses:catalog' %}">{% include "components/icon.html" with icon="x" icon_class="h-4 w-4" %}Clear search</a>{% else %}<p class="text-lg font-bold text-ink">Courses are being prepared.</p><p class="mt-2 text-slate-500">Check back soon for the first Aiducator learning experience.</p>{% endif %}</div>
   {% endif %}
 </section>
 {% endblock %}
