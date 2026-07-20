@@ -63,8 +63,8 @@ class CourseGenerationForm(forms.Form):
     assessment_types = forms.MultipleChoiceField(
         label="Assessment types",
         choices=Question.QuestionType.choices,
-        help_text="Select one or more assessment types for AI to generate.",
-        widget=forms.SelectMultiple(attrs={"size": 5}),
+        help_text="Select every assessment type you want AI to generate.",
+        widget=forms.CheckboxSelectMultiple(attrs={"class": "assessment-type-options"}),
     )
     free_prompt = forms.CharField(
         required=False,

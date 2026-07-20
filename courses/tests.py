@@ -1213,6 +1213,7 @@ class CourseGenerationTests(TestCase):
         response = self.client.get(reverse("teacher_courses:generate"))
 
         self.assertContains(response, 'name="assessment_types"')
+        self.assertContains(response, 'type="checkbox"')
         self.assertContains(response, "Scenario-based")
         self.assertNotContains(response, ">Explanation<")
         self.assertNotContains(response, "Code writing")
