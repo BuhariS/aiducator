@@ -383,9 +383,20 @@ class CourseAuthoringTests(TestCase):
     def test_editor_links_to_module_editing_and_orders_materials_before_assessments(self):
         version = CourseVersion.objects.create(course=self.course, version_number=1, status=CourseVersion.Status.DRAFT)
         module = Module.objects.create(course_version=version, title="Foundations", position=1)
-        lesson = LessonVersion.objects.create(module=module, title="Variables", content="Lesson content.", position=1)
+        lesson = LessonVersion.objects.create(
+            module=module,
+            title="Variables",
+            objectives=["Explain how variables hold values", "Name variables clearly"],
+            content="## Lesson content\n\nUse a meaningful name for each value.",
+            position=1,
+        )
         LessonArtifact.objects.create(lesson_version=lesson, artifact_type="text", content="M" * 500)
         Question.objects.create(lesson_version=lesson, question_type="scenario", prompt="Q" * 500)
+        FinalProject.objects.create(
+            course_version=version,
+            title="Build a variable tracker",
+            brief="Create a small practical tracker using named variables.",
+        )
 
         response = self.client.get(
             reverse("teacher_courses:version-editor", kwargs={"slug": self.course.slug, "version_id": version.id})
@@ -401,6 +412,12 @@ class CourseAuthoringTests(TestCase):
         self.assertContains(response, "Continue to assessments and rubrics")
         self.assertContains(response, "M" * 500)
         self.assertContains(response, "Q" * 500)
+        self.assertContains(response, "Learning objectives")
+        self.assertContains(response, "Explain how variables hold values")
+        self.assertContains(response, "<h2>Lesson content</h2>", html=True)
+        page = response.content.decode()
+        self.assertLess(page.index(f'id="lesson-{lesson.id}-assessments"'), page.index('id="final-project"'))
+        self.assertLess(page.index('id="final-project"'), page.index('id="publish"'))
 
     def test_teacher_can_edit_course_setup_before_publishing(self):
         response = self.client.post(

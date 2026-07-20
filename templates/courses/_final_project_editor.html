@@ -1,0 +1,14 @@
+<section id="final-project" class="scroll-mt-6 surface-card p-6 sm:p-8">
+  <div class="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+    <div><p class="text-xs font-black uppercase tracking-wider text-emerald">Step 5 · Final project</p><h2 class="mt-2 text-2xl font-black text-ink">Bring the learning together</h2><p class="mt-2 text-sm leading-6 text-slate-500">Use an AI-assisted project draft or create your own practical challenge, then review its rubric before publishing.</p></div>
+    <a class="primary-button" href="{% url 'teacher_courses:final-project' course.slug version.id %}">{% if final_project %}Edit final project{% else %}Add final project{% endif %}</a>
+  </div>
+  {% if final_project %}
+    <div class="mt-6 grid gap-4 lg:grid-cols-2">
+      <div class="rounded-2xl bg-cloud p-5"><div class="flex flex-wrap items-center gap-2"><span class="rounded-full bg-emerald/10 px-3 py-1 text-xs font-black text-emerald">{{ final_project.estimated_hours }} hours</span>{% if final_project.ai_generated %}<span class="rounded-full bg-sunshine/20 px-3 py-1 text-xs font-black text-amber-800">AI-assisted draft</span>{% endif %}</div><h3 class="mt-4 text-xl font-black text-ink">{{ final_project.title }}</h3><p class="mt-2 text-sm leading-6 text-slate-600">{{ final_project.brief }}</p></div>
+      <div class="rounded-2xl bg-cloud p-5"><p class="text-sm font-black text-ink">Project rubric</p><ul class="mt-3 space-y-2 text-sm leading-6 text-slate-600">{% for criterion in final_project.rubric %}<li>• {{ criterion.criterion }} <span class="font-bold text-emerald">({{ criterion.weight }}%)</span></li>{% endfor %}</ul></div>
+    </div>
+  {% else %}
+    <div class="mt-6 rounded-2xl border border-dashed border-slate-200 p-6 text-sm text-slate-500">No final project has been added yet. It is optional for older manual drafts, but recommended for a complete course.</div>
+  {% endif %}
+</section>
