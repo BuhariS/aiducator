@@ -57,15 +57,14 @@ class CourseGenerationForm(forms.Form):
     audience = forms.CharField(
         max_length=180,
         required=False,
-        initial="Nigerian secondary-school students",
-        widget=forms.TextInput(attrs={"placeholder": "Nigerian secondary-school students"}),
+        widget=forms.TextInput(attrs={"placeholder": "e.g. Secondary-school learners"}),
     )
     free_prompt = forms.CharField(
         required=False,
         max_length=4_000,
         label="Additional teacher prompt",
         help_text="Use this for creative direction, local examples, pacing, or a fully free-form request.",
-        widget=forms.Textarea(attrs={"rows": 7, "placeholder": "Create practical lessons using Nigerian classroom examples..."}),
+        widget=forms.Textarea(attrs={"rows": 7, "placeholder": "Create practical lessons using relevant classroom examples..."}),
     )
 
     def clean_title(self):

@@ -1035,6 +1035,12 @@ class CourseGenerationTests(TestCase):
         )
         self.client.force_login(self.teacher)
 
+    def test_generation_form_does_not_preselect_a_location_specific_audience(self):
+        response = self.client.get(reverse("teacher_courses:generate"))
+
+        self.assertNotContains(response, 'value="Nigerian secondary-school students"')
+        self.assertContains(response, "e.g. Secondary-school learners")
+
     def test_teacher_generation_creates_reviewable_unpublished_draft(self):
         with self.captureOnCommitCallbacks(execute=True):
             response = self.client.post(
