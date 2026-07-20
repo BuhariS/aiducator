@@ -7,11 +7,12 @@
       <p class="text-sm font-bold uppercase tracking-[0.25em] text-sunshine">Course catalog</p>
       <h1 class="mt-4 text-4xl font-black leading-tight text-white sm:text-5xl">Learn the skills that help you build.</h1>
       <p class="mt-5 text-lg leading-8 text-slate-300">Teacher-guided courses designed for focused progress, practical confidence, and meaningful feedback.</p>
+      <form class="mt-8 max-w-xl" method="get" role="search"><label class="sr-only" for="course-search">Search courses</label><div class="flex rounded-2xl bg-white p-2 shadow-lg shadow-black/20"><input id="course-search" class="min-w-0 flex-1 border-0 bg-transparent px-3 text-ink placeholder:text-slate-400 focus:ring-0" type="search" name="q" value="{{ query }}" placeholder="Search by topic, course, or school"><button class="rounded-xl bg-sunshine px-5 py-3 text-sm font-black text-ink transition hover:bg-amber-300" type="submit">Search</button></div></form>
     </div>
   </div>
 </section>
 <section class="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-  <div class="mb-8 flex items-end justify-between"><div><p class="text-sm font-bold uppercase tracking-wider text-emerald">Explore learning</p><h2 class="mt-2 text-2xl font-black text-ink">Available courses</h2></div></div>
+  <div class="mb-8 flex items-end justify-between"><div><p class="text-sm font-bold uppercase tracking-wider text-emerald">Explore learning</p><h2 class="mt-2 text-2xl font-black text-ink">{% if query %}Results for “{{ query }}”{% else %}Available courses{% endif %}</h2></div>{% if query %}<a class="text-sm font-bold text-emerald hover:underline" href="{% url 'courses:catalog' %}">Clear search</a>{% endif %}</div>
   {% if courses %}
     <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
       {% for course in courses %}
@@ -22,7 +23,7 @@
       {% endfor %}
     </div>
   {% else %}
-    <div class="surface-card p-10 text-center"><p class="text-lg font-bold text-ink">Courses are being prepared.</p><p class="mt-2 text-slate-500">Check back soon for the first Aiducator learning experience.</p></div>
+    <div class="surface-card p-10 text-center"><p class="text-lg font-bold text-ink">{% if query %}No courses match that search yet.{% else %}Courses are being prepared.{% endif %}</p><p class="mt-2 text-slate-500">{% if query %}Try a broader topic or clear the search to explore every course.{% else %}Check back soon for the first Aiducator learning experience.{% endif %}</p></div>
   {% endif %}
 </section>
 {% endblock %}
