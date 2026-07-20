@@ -19,9 +19,10 @@ class OpenAIGradingProvider:
     def __init__(self):
         if not settings.OPENAI_API_KEY:
             raise ProviderError("OPENAI_API_KEY is not configured")
-        client_options = {"api_key": settings.OPENAI_API_KEY}
-        if settings.OPENAI_BASE_URL:
-            client_options["base_url"] = settings.OPENAI_BASE_URL
+        client_options = {
+            "api_key": settings.OPENAI_API_KEY,
+            "base_url": settings.OPENAI_BASE_URL or "https://api.openai.com/v1",
+        }
         self.client = OpenAI(**client_options)
 
     def grade(self, *, question: str, answer: str, rubric: list[dict], execution_context=None) -> ProviderGrade:
@@ -78,9 +79,10 @@ class OpenAIAnalyticsAnalyzer:
     def __init__(self):
         if not settings.OPENAI_API_KEY:
             raise ProviderError("OPENAI_API_KEY is not configured")
-        client_options = {"api_key": settings.OPENAI_API_KEY}
-        if settings.OPENAI_BASE_URL:
-            client_options["base_url"] = settings.OPENAI_BASE_URL
+        client_options = {
+            "api_key": settings.OPENAI_API_KEY,
+            "base_url": settings.OPENAI_BASE_URL or "https://api.openai.com/v1",
+        }
         self.client = OpenAI(**client_options)
 
     def analyze(self, metrics: dict) -> ProviderAnalyticsAnalysis:
@@ -129,9 +131,10 @@ class OpenAICourseGenerationProvider:
     def __init__(self):
         if not settings.OPENAI_API_KEY:
             raise ProviderError("OPENAI_API_KEY is not configured")
-        client_options = {"api_key": settings.OPENAI_API_KEY}
-        if settings.OPENAI_BASE_URL:
-            client_options["base_url"] = settings.OPENAI_BASE_URL
+        client_options = {
+            "api_key": settings.OPENAI_API_KEY,
+            "base_url": settings.OPENAI_BASE_URL or "https://api.openai.com/v1",
+        }
         self.client = OpenAI(**client_options)
 
     def generate(self, request: CourseGenerationInput) -> ProviderCourseGeneration:
@@ -169,8 +172,8 @@ class OpenAICourseGenerationProvider:
     def _build_prompt(request: CourseGenerationInput) -> str:
         return (
             "Create a teacher-reviewable draft course. Include lesson explanations, learning objectives, "
-            "code examples, image prompts, YouTube search suggestions, translation drafts when requested, "
-            "and assessment questions with rubrics. Use the supported question types: scenario, "
+            "code examples, image prompts, YouTube search suggestions, and assessment questions with rubrics. "
+            "Use the supported question types: scenario, "
             "critical_thinking, task_prompt, misconception, error_identification, explanation, "
             "code_writing, debugging, and reflection. Also create one practical final project with "
             "objectives, requirements, deliverables, estimated hours, and an assessed rubric.\n\n"
@@ -178,6 +181,5 @@ class OpenAICourseGenerationProvider:
             f"Learning objective: <objective>\n{redact_provider_text(request.objective, max_length=2_000)}\n</objective>\n"
             f"Duration in weeks: {request.duration_weeks}\n"
             f"Audience: {redact_provider_text(request.audience, max_length=180)}\n"
-            f"Requested translations: {request.translation_languages}\n"
             f"Additional teacher prompt:\n<teacher_prompt>\n{redact_provider_text(request.free_prompt, max_length=4_000)}\n</teacher_prompt>"
         )

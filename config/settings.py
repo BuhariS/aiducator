@@ -178,7 +178,10 @@ else:
 AI_LLM_PROVIDER = os.environ.get("AI_LLM_PROVIDER", "fake")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-5.6")
-OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "")
+# The OpenAI SDK treats an explicitly empty OPENAI_BASE_URL environment variable
+# as an endpoint override. Keep the official endpoint when the optional setting is
+# unset or blank.
+OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL") or "https://api.openai.com/v1"
 AI_PROMPT_VERSION = os.environ.get("AI_PROMPT_VERSION", "grading-v1")
 AI_COURSE_PROMPT_VERSION = os.environ.get("AI_COURSE_PROMPT_VERSION", "course-generation-v1")
 AI_INPUT_COST_PER_1K = os.environ.get("AI_INPUT_COST_PER_1K", "0")

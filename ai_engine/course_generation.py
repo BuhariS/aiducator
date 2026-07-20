@@ -10,7 +10,6 @@ from courses.models import (
     LessonArtifact,
     LessonVersion,
     Module,
-    Translation,
 )
 
 from .models import CourseGenerationRequest
@@ -78,7 +77,7 @@ def persist_generation_result(request: CourseGenerationRequest, result: CourseGe
                     lesson_version=lesson,
                     artifact_type=generated_artifact.artifact_type,
                     content=generated_artifact.content,
-                    metadata=deepcopy(generated_artifact.metadata),
+                    metadata=generated_artifact.metadata.model_dump(),
                     ai_generated=True,
                     teacher_approved=False,
                     position=artifact_position,
@@ -98,15 +97,6 @@ def persist_generation_result(request: CourseGenerationRequest, result: CourseGe
                     version_number=1,
                     criteria=[criterion.model_dump() for criterion in generated_question.rubric],
                     total_score=generated_question.max_score,
-                )
-            for generated_translation in generated_lesson.translations:
-                Translation.objects.update_or_create(
-                    lesson_version=lesson,
-                    language_code=generated_translation.language_code,
-                    defaults={
-                        "content": deepcopy(generated_translation.content),
-                        "status": Translation.Status.DRAFT,
-                    },
                 )
 
     generated_project = result.final_project

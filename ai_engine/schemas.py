@@ -43,8 +43,14 @@ def _reject_unsafe_payload(value):
     return value
 
 
-class GradingResult(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
+class StructuredOutputModel(BaseModel):
+    """Base schema compatible with OpenAI Structured Outputs."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class GradingResult(StructuredOutputModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
     score: int = Field(ge=0, le=100, validation_alias=AliasChoices("score", "suggested_score"))
     confidence: float = Field(ge=0, le=1)
@@ -68,7 +74,7 @@ class GradingResult(BaseModel):
         return self.requires_review
 
 
-class AnalyticsInsight(BaseModel):
+class AnalyticsInsight(StructuredOutputModel):
     priority: Literal["high", "medium", "low"] = "medium"
     title: str = Field(min_length=3, max_length=180)
     evidence: str = Field(min_length=3, max_length=600)
@@ -79,7 +85,7 @@ class AnalyticsInsight(BaseModel):
     _safe_action = field_validator("action")(_reject_unsafe_text)
 
 
-class AnalyticsAnalysisResult(BaseModel):
+class AnalyticsAnalysisResult(StructuredOutputModel):
     summary: str = Field(min_length=3, max_length=1200)
     insights: list[AnalyticsInsight] = Field(min_length=1, max_length=8)
     next_steps: list[str] = Field(min_length=1, max_length=6)
@@ -88,23 +94,33 @@ class AnalyticsAnalysisResult(BaseModel):
     _safe_next_steps = field_validator("next_steps")(_reject_unsafe_payload)
 
 
-class GeneratedArtifact(BaseModel):
+class GeneratedArtifactMetadata(StructuredOutputModel):
+    language: str = Field(max_length=32)
+    purpose: str = Field(max_length=240)
+    search_terms: list[str] = Field(max_length=12)
+
+    _safe_language = field_validator("language")(_reject_unsafe_text)
+    _safe_purpose = field_validator("purpose")(_reject_unsafe_text)
+    _safe_search_terms = field_validator("search_terms")(_reject_unsafe_payload)
+
+
+class GeneratedArtifact(StructuredOutputModel):
     artifact_type: GENERATED_ARTIFACT_TYPES
     content: str = Field(min_length=1, max_length=12000)
-    metadata: dict = Field(default_factory=dict)
+    metadata: GeneratedArtifactMetadata
 
     _safe_content = field_validator("content")(_reject_unsafe_text)
     _safe_metadata = field_validator("metadata")(_reject_unsafe_payload)
 
 
-class GeneratedRubricCriterion(BaseModel):
+class GeneratedRubricCriterion(StructuredOutputModel):
     criterion: str = Field(min_length=3, max_length=500)
     weight: float = Field(gt=0, le=100)
 
     _safe_criterion = field_validator("criterion")(_reject_unsafe_text)
 
 
-class GeneratedQuestion(BaseModel):
+class GeneratedQuestion(StructuredOutputModel):
     question_type: GENERATED_QUESTION_TYPES
     prompt: str = Field(min_length=10, max_length=4000)
     rubric: list[GeneratedRubricCriterion] = Field(min_length=1, max_length=12)
@@ -113,33 +129,25 @@ class GeneratedQuestion(BaseModel):
     _safe_prompt = field_validator("prompt")(_reject_unsafe_text)
 
 
-class GeneratedTranslation(BaseModel):
-    language_code: str = Field(min_length=2, max_length=12)
-    content: dict
-
-    _safe_content = field_validator("content")(_reject_unsafe_payload)
-
-
-class GeneratedLesson(BaseModel):
+class GeneratedLesson(StructuredOutputModel):
     title: str = Field(min_length=3, max_length=180)
     objectives: list[str] = Field(min_length=1, max_length=8)
     content: str = Field(min_length=30, max_length=20000)
     artifacts: list[GeneratedArtifact] = Field(default_factory=list, max_length=20)
     questions: list[GeneratedQuestion] = Field(min_length=1, max_length=12)
-    translations: list[GeneratedTranslation] = Field(default_factory=list, max_length=12)
 
     _safe_title = field_validator("title")(_reject_unsafe_text)
     _safe_content = field_validator("content")(_reject_unsafe_text)
 
 
-class GeneratedModule(BaseModel):
+class GeneratedModule(StructuredOutputModel):
     title: str = Field(min_length=3, max_length=180)
     lessons: list[GeneratedLesson] = Field(min_length=1, max_length=20)
 
     _safe_title = field_validator("title")(_reject_unsafe_text)
 
 
-class GeneratedFinalProject(BaseModel):
+class GeneratedFinalProject(StructuredOutputModel):
     title: str = Field(min_length=3, max_length=180)
     brief: str = Field(min_length=30, max_length=10000)
     objectives: list[str] = Field(min_length=1, max_length=8)
@@ -155,7 +163,7 @@ class GeneratedFinalProject(BaseModel):
     _safe_deliverables = field_validator("deliverables")(_reject_unsafe_payload)
 
 
-class CourseGenerationResult(BaseModel):
+class CourseGenerationResult(StructuredOutputModel):
     title: str = Field(min_length=3, max_length=180)
     description: str = Field(min_length=20, max_length=5000)
     modules: list[GeneratedModule] = Field(min_length=1, max_length=20)

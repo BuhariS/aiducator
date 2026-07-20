@@ -105,17 +105,29 @@ class FakeCourseGenerationProvider:
                                 {
                                     "artifact_type": "code_example",
                                     "content": "value = 3\nprint(value)",
-                                    "metadata": {"language": "python"},
+                                    "metadata": {
+                                        "language": "python",
+                                        "purpose": "Show a short runnable example.",
+                                        "search_terms": [],
+                                    },
                                 },
                                 {
                                     "artifact_type": "image_prompt",
                                     "content": "A clear classroom illustration of a Python value stored in a labelled box.",
-                                    "metadata": {"purpose": "future image generation"},
+                                    "metadata": {
+                                        "language": "",
+                                        "purpose": "Future image generation.",
+                                        "search_terms": [],
+                                    },
                                 },
                                 {
                                     "artifact_type": "youtube_search",
                                     "content": f"Python {lesson_title.lower()} for beginners",
-                                    "metadata": {"search_terms": ["Python", lesson_title]},
+                                    "metadata": {
+                                        "language": "",
+                                        "purpose": "Find a suitable supporting video.",
+                                        "search_terms": ["Python", lesson_title],
+                                    },
                                 },
                             ],
                             "questions": [
@@ -144,16 +156,6 @@ class FakeCourseGenerationProvider:
                                     "prompt": "Find and explain the mistake in this code: print(total) before total has been assigned.",
                                     "rubric": [{"criterion": "Identifies the error", "weight": 50}, {"criterion": "Suggests a correction", "weight": 50}],
                                 },
-                            ],
-                            "translations": [
-                                {
-                                    "language_code": language_code,
-                                    "content": {
-                                        "title": lesson_title,
-                                        "content": "Translation draft pending teacher review.",
-                                    },
-                                }
-                                for language_code in request.translation_languages
                             ],
                         }
                     ],

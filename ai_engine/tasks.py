@@ -213,7 +213,6 @@ def generate_course(self, job_id):
         duration_weeks=request.duration_weeks,
         audience=request.audience,
         free_prompt=request.free_prompt,
-        translation_languages=request.translation_languages,
     )
     try:
         provider = get_course_generation_provider()

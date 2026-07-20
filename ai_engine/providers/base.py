@@ -25,7 +25,6 @@ class CourseGenerationInput:
     duration_weeks: int
     audience: str
     free_prompt: str
-    translation_languages: list[str]
 
 
 @dataclass(frozen=True)

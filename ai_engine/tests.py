@@ -4,13 +4,53 @@ from unittest.mock import patch
 from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
 
-from .providers.openai import OpenAIGradingProvider
-from .schemas import GradingResult
+from .providers.base import CourseGenerationInput
+from .providers.openai import OpenAICourseGenerationProvider, OpenAIGradingProvider
+from .schemas import CourseGenerationResult, GradingResult
 from .fields import EncryptedTextField
 from .security import allowed_embed_url, moderate_text, reject_prompt_injection
 
 
 class OpenAIProviderTests(TestCase):
+    def test_course_generation_schema_closes_every_object(self):
+        schema = CourseGenerationResult.model_json_schema()
+        object_schemas = []
+        nodes = [schema]
+        while nodes:
+            node = nodes.pop()
+            if isinstance(node, dict):
+                if node.get("type") == "object":
+                    object_schemas.append(node)
+                nodes.extend(node.values())
+            elif isinstance(node, list):
+                nodes.extend(node)
+
+        self.assertTrue(object_schemas)
+        self.assertTrue(all(item.get("additionalProperties") is False for item in object_schemas))
+
+    @override_settings(OPENAI_API_KEY="test-key", OPENAI_BASE_URL="")
+    @patch("ai_engine.providers.openai.OpenAI")
+    def test_blank_custom_endpoint_uses_openai_default(self, openai_class):
+        OpenAIGradingProvider()
+
+        self.assertEqual(
+            openai_class.call_args.kwargs["base_url"],
+            "https://api.openai.com/v1",
+        )
+
+    def test_course_generation_prompt_omits_translation_requests(self):
+        prompt = OpenAICourseGenerationProvider._build_prompt(
+            CourseGenerationInput(
+                title="Python foundations",
+                objective="Learners will apply core Python concepts.",
+                duration_weeks=6,
+                audience="Secondary-school learners",
+                free_prompt="Use locally relevant examples.",
+            )
+        )
+
+        self.assertNotIn("translation", prompt.lower())
+
     @override_settings(OPENAI_API_KEY="test-key", OPENAI_MODEL="gpt-5.6")
     @patch("ai_engine.providers.openai.OpenAI")
     def test_provider_requests_and_returns_structured_grading(self, openai_class):
