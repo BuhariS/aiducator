@@ -1,15 +1,12 @@
-import uuid
-
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import LoginView
 from django.db import transaction
 from django.shortcuts import redirect, render
 from django.urls import reverse_lazy
-from django.utils.text import slugify
 from django.views.generic import CreateView
 
-from organizations.models import Membership, Organization
+from organizations.models import Membership
 
 from .access import user_has_admin_access, user_is_teacher
 from .forms import EmailAuthenticationForm, SignUpForm
@@ -34,18 +31,10 @@ class SignUpView(CreateView):
     def form_valid(self, form):
         with transaction.atomic():
             self.object = form.save()
-            display_name = self.object.get_full_name() or self.object.email.split("@", 1)[0]
             role = form.cleaned_data["role"]
-            if role == SignUpForm.Role.TEACHER:
-                organization_name = form.cleaned_data["organization_name"].strip()
-                membership_role = Membership.Role.TEACHER
-            else:
-                organization_name = f"{display_name}'s Learning Space"
-                membership_role = Membership.Role.STUDENT
-            organization_slug = f"{slugify(organization_name)[:180]}-{uuid.uuid4().hex[:8]}"
-            organization = Organization.objects.create(name=organization_name, slug=organization_slug)
+            membership_role = Membership.Role.TEACHER if role == SignUpForm.Role.TEACHER else Membership.Role.STUDENT
             Membership.objects.create(
-                organization=organization,
+                organization=form.cleaned_data["organization"],
                 user=self.object,
                 role=membership_role,
             )

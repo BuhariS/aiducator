@@ -2,6 +2,8 @@ from django import forms
 from django.contrib.auth import authenticate
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 
+from organizations.models import Organization
+
 from .models import User
 
 
@@ -21,16 +23,17 @@ class SignUpForm(UserCreationForm):
         required=False,
         label="I am signing up as a",
     )
-    organization_name = forms.CharField(
-        label="School or classroom name",
-        max_length=180,
-        required=False,
-        help_text="Required for teachers. This is where you will manage courses.",
+    organization = forms.ModelChoiceField(
+        label="School or Organization name",
+        queryset=Organization.objects.none(),
+        empty_label="Select your school or organization",
+        help_text="Choose the school, organization, or classroom you are joining.",
     )
 
     def __init__(self, *args, signup_role=None, **kwargs):
         self.signup_role = signup_role
         super().__init__(*args, **kwargs)
+        self.fields["organization"].queryset = Organization.objects.order_by("name")
         self.fields["first_name"].widget.attrs["autofocus"] = "autofocus"
         if signup_role:
             self.fields["role"].initial = signup_role
@@ -38,21 +41,12 @@ class SignUpForm(UserCreationForm):
 
     class Meta:
         model = User
-        fields = ("first_name", "last_name", "email", "role", "organization_name")
+        fields = ("first_name", "last_name", "email", "role", "organization")
 
     def clean_role(self):
         if self.signup_role:
             return self.signup_role
         return self.cleaned_data.get("role") or self.Role.STUDENT
-
-    def clean(self):
-        cleaned_data = super().clean()
-        if (
-            cleaned_data.get("role") == self.Role.TEACHER
-            and not cleaned_data.get("organization_name", "").strip()
-        ):
-            self.add_error("organization_name", "Enter your school or classroom name to continue.")
-        return cleaned_data
 
     def clean_email(self):
         return self.cleaned_data["email"].lower().strip()
