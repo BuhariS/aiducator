@@ -351,6 +351,8 @@ class CourseAuthoringTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Course Studio")
+        self.assertContains(response, "View published courses")
+        self.assertContains(response, reverse("courses:catalog"))
         self.assertContains(response, "Generate with AI")
         self.assertContains(response, "Create a course manually")
         self.assertContains(response, self.course.title)
