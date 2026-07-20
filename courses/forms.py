@@ -5,7 +5,7 @@ from django.utils.text import slugify
 
 from ai_engine.security import allowed_embed_url, clean_input, reject_prompt_injection
 
-from .models import Course, FinalProject, LessonArtifact, LessonVersion, Module
+from .models import Course, FinalProject, LessonArtifact, LessonFeedback, LessonVersion, Module, ProjectSubmission
 
 
 class CourseForm(forms.ModelForm):
@@ -128,8 +128,6 @@ class ArtifactForm(forms.ModelForm):
         if artifact_type in {
             LessonArtifact.ArtifactType.TEXT,
             LessonArtifact.ArtifactType.CODE,
-            LessonArtifact.ArtifactType.IMAGE_PROMPT,
-            LessonArtifact.ArtifactType.YOUTUBE_SEARCH,
         } and not content:
             self.add_error("content", "Add text content.")
         if content and artifact_type in {
@@ -154,6 +152,8 @@ class ArtifactForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["content"].required = False
+        self.fields["content"].label = "Content or video URL"
+        self.fields["content"].help_text = "For a video, paste a direct YouTube or Vimeo video URL. Aiducator will embed it for learners."
 
 
 class LessonForm(forms.ModelForm):
@@ -165,6 +165,38 @@ class LessonForm(forms.ModelForm):
             "position": forms.NumberInput(attrs={"min": 1}),
             "content": forms.Textarea(attrs={"rows": 14, "maxlength": 20000, "placeholder": "Write the lesson explanation..."}),
         }
+
+
+class LessonFeedbackForm(forms.ModelForm):
+    class Meta:
+        model = LessonFeedback
+        fields = ("rating", "comment")
+        widgets = {
+            "rating": forms.RadioSelect(choices=[(value, f"{value} star{'s' if value != 1 else ''}") for value in range(1, 6)]),
+            "comment": forms.Textarea(
+                attrs={"rows": 3, "maxlength": 1000, "placeholder": "What helped you, or what could be clearer?"}
+            ),
+        }
+
+    def clean_comment(self):
+        return clean_input(self.cleaned_data.get("comment", ""), field_name="Lesson feedback", max_length=1_000)
+
+
+class ProjectSubmissionForm(forms.ModelForm):
+    class Meta:
+        model = ProjectSubmission
+        fields = ("answer_text",)
+        widgets = {
+            "answer_text": forms.Textarea(
+                attrs={"rows": 10, "maxlength": 12_000, "placeholder": "Describe your work, paste your project link, and include the evidence requested above..."}
+            )
+        }
+
+    def clean_answer_text(self):
+        answer = clean_input(self.cleaned_data.get("answer_text", ""), field_name="Project submission", max_length=12_000)
+        if len(answer) < 10:
+            raise forms.ValidationError("Add at least 10 characters so AI can review your project.")
+        return answer
 
 
 class FinalProjectForm(forms.ModelForm):

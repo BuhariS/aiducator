@@ -5,7 +5,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Avg
+from django.db.models import Avg, Q
 from django.http import Http404, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -33,16 +33,25 @@ from .forms import (
     CourseForm,
     CourseGenerationForm,
     FinalProjectForm,
+    LessonFeedbackForm,
     LessonForm,
     ModuleForm,
+    ProjectSubmissionForm,
 )
-from .models import Course, CourseVersion, FinalProject, LessonArtifact, LessonVersion, Module
+from .models import Course, CourseVersion, FinalProject, LessonArtifact, LessonFeedback, LessonVersion, Module, ProjectSubmission
 from .services import create_draft_version
 
 
 def catalog(request):
+    query = request.GET.get("q", "").strip()
     courses = Course.objects.filter(status=Course.Status.PUBLISHED).select_related("organization", "created_by")
-    return render(request, "courses/catalog.html", {"courses": courses})
+    if query:
+        courses = courses.filter(
+            Q(title__icontains=query)
+            | Q(description__icontains=query)
+            | Q(organization__name__icontains=query)
+        )
+    return render(request, "courses/catalog.html", {"courses": courses, "query": query})
 
 
 @login_required
@@ -146,6 +155,17 @@ def learn(request, slug, lesson_id=None):
     for module in modules:
         module_lessons = list(module.lessons.all())
         module.is_completed = bool(module_lessons) and all(lesson.is_completed for lesson in module_lessons)
+    final_project = getattr(version, "final_project", None)
+    project_submission = (
+        ProjectSubmission.objects.filter(enrollment=enrollment, final_project=final_project).first()
+        if final_project
+        else None
+    )
+    lesson_feedback = (
+        LessonFeedback.objects.filter(enrollment=enrollment, lesson_version=selected_lesson).first()
+        if selected_lesson
+        else None
+    )
     course_completion = CourseCompletion.objects.filter(enrollment=enrollment).first()
     return render(
         request,
@@ -154,15 +174,123 @@ def learn(request, slug, lesson_id=None):
             "course": course,
             "enrollment": enrollment,
             "modules": modules,
-            "final_project": getattr(version, "final_project", None),
+            "final_project": final_project,
             "first_lesson": selected_lesson,
             "selected_lesson": selected_lesson,
             "next_lesson": next_lesson,
+            "is_final_lesson": bool(selected_lesson and lessons and selected_lesson.id == lessons[-1].id),
             "course_completion": course_completion,
             "progress_by_lesson": progress_by_lesson,
             "attempts_by_question": attempts_by_question,
+            "project_submission": project_submission,
+            "project_submission_form": ProjectSubmissionForm(instance=project_submission),
+            "lesson_feedback": lesson_feedback,
+            "lesson_feedback_form": LessonFeedbackForm(instance=lesson_feedback),
         },
     )
+
+
+@login_required
+@require_POST
+@rate_limit("lesson-feedback", limit=settings.AI_RATE_LIMIT_ATTEMPT, period=3600)
+def submit_lesson_feedback(request, slug, lesson_id):
+    course = get_object_or_404(Course, slug=slug, status=Course.Status.PUBLISHED)
+    enrollment = get_object_or_404(
+        Enrollment.objects.select_related("course_version"),
+        course=course,
+        student=request.user,
+        status=Enrollment.Status.ACTIVE,
+    )
+    lesson = get_object_or_404(LessonVersion, id=lesson_id, module__course_version=enrollment.course_version)
+    feedback = LessonFeedback.objects.filter(enrollment=enrollment, lesson_version=lesson).first()
+    form = LessonFeedbackForm(request.POST, instance=feedback)
+    if form.is_valid():
+        feedback = form.save(commit=False)
+        feedback.enrollment = enrollment
+        feedback.lesson_version = lesson
+        feedback.save()
+        messages.success(request, "Thanks — your lesson feedback has been saved.")
+    else:
+        messages.error(request, "Choose a rating from 1 to 5 before sending feedback.")
+    return redirect("courses:learn-lesson", slug=course.slug, lesson_id=lesson.id)
+
+
+@login_required
+@require_POST
+@rate_limit("project-submission", limit=settings.AI_RATE_LIMIT_ATTEMPT, period=3600)
+def submit_final_project(request, slug):
+    course = get_object_or_404(Course, slug=slug, status=Course.Status.PUBLISHED)
+    enrollment = get_object_or_404(
+        Enrollment.objects.select_related("course_version"),
+        course=course,
+        student=request.user,
+        status=Enrollment.Status.ACTIVE,
+    )
+    final_project = getattr(enrollment.course_version, "final_project", None)
+    if final_project is None:
+        raise Http404("This course does not have a final project.")
+    submission = ProjectSubmission.objects.filter(enrollment=enrollment, final_project=final_project).first()
+    if submission and submission.status != ProjectSubmission.Status.FAILED:
+        messages.info(request, "Your final project is already submitted. Its review will appear here when ready.")
+        return _redirect_to_final_lesson(course, enrollment)
+    form = ProjectSubmissionForm(request.POST, instance=submission)
+    if not form.is_valid():
+        messages.error(request, "Add enough detail for AI to review your final project.")
+        return _redirect_to_final_lesson(course, enrollment)
+    with transaction.atomic():
+        submission = form.save(commit=False)
+        submission.enrollment = enrollment
+        submission.final_project = final_project
+        submission.status = ProjectSubmission.Status.SUBMITTED
+        submission.suggested_score = None
+        submission.confidence = None
+        submission.strengths = []
+        submission.errors = []
+        submission.feedback = ""
+        submission.remediation = ""
+        submission.provider = ""
+        submission.model = ""
+        submission.reviewed_at = None
+        submission.save()
+        job = AIJob.objects.create(
+            job_type=AIJob.JobType.PROJECT_GRADING,
+            entity_type="project_submission",
+            entity_id=submission.id,
+            status=AIJob.Status.QUEUED,
+        )
+        record_audit_event(
+            action="final_project_submitted",
+            actor=request.user,
+            obj=submission,
+            request=request,
+            metadata={"job_id": str(job.id), "final_project_id": str(final_project.id)},
+        )
+        transaction.on_commit(lambda: _enqueue_project_grading(job.id))
+    messages.success(request, "Your final project was submitted for AI review. We will notify you when it is ready.")
+    return _redirect_to_final_lesson(course, enrollment)
+
+
+def _redirect_to_final_lesson(course, enrollment):
+    final_lesson = LessonVersion.objects.filter(module__course_version=enrollment.course_version).order_by(
+        "module__position", "position"
+    ).last()
+    if final_lesson:
+        return redirect("courses:learn-lesson", slug=course.slug, lesson_id=final_lesson.id)
+    return redirect("courses:learn", slug=course.slug)
+
+
+def _enqueue_project_grading(job_id):
+    from ai_engine.tasks import grade_project_submission
+
+    try:
+        if settings.CELERY_TASK_ALWAYS_EAGER:
+            grade_project_submission.apply(args=[str(job_id)])
+        else:
+            grade_project_submission.delay(str(job_id))
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception("Unable to enqueue final-project grading job %s", job_id)
 
 
 @login_required
@@ -379,6 +507,13 @@ def course_settings(request, slug):
     if request.method == "POST" and form.is_valid():
         form.save()
         messages.success(request, "Course setup saved.")
+        draft = course.versions.filter(status=CourseVersion.Status.DRAFT).order_by("-version_number").first()
+        if draft:
+            destination = reverse("teacher_courses:version-editor", kwargs={"slug": course.slug, "version_id": draft.id})
+            first_module = draft.modules.order_by("position").first()
+            if first_module:
+                destination = f"{destination}#module-{first_module.id}"
+            return redirect(destination)
         return redirect("teacher_courses:studio", slug=course.slug)
     return render(request, "courses/course_settings_form.html", {"course": course, "form": form})
 

@@ -8,6 +8,7 @@ class AIJob(models.Model):
     class JobType(models.TextChoices):
         COURSE_GENERATION = "course_generation", "Course generation"
         GRADING = "grading", "Grading"
+        PROJECT_GRADING = "project_grading", "Final project grading"
         TRANSLATION = "translation", "Translation"
 
     class Status(models.TextChoices):

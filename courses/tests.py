@@ -117,11 +117,83 @@ class CourseFlowTests(TestCase):
 
         self.assertContains(response, "Learning objectives")
         self.assertContains(response, "Congratulations — you completed Python Fundamentals!")
-        self.assertContains(response, "Next module")
+        self.assertContains(response, ">Next<")
         self.assertContains(
             response,
             f'href="{reverse("courses:learn-lesson", kwargs={"slug": self.course.slug, "lesson_id": next_lesson.id})}"',
         )
+
+    def test_lesson_markdown_and_youtube_video_are_rendered(self):
+        version = CourseVersion.objects.create(course=self.course, version_number=2, status=CourseVersion.Status.DRAFT)
+        module = Module.objects.create(course_version=version, title="Basics", position=1)
+        lesson = LessonVersion.objects.create(
+            module=module,
+            title="Variables",
+            objectives=["Use variables"],
+            content="## A useful heading\n\nVariables store values.",
+            position=1,
+            status=LessonVersion.Status.PUBLISHED,
+        )
+        LessonArtifact.objects.create(
+            lesson_version=lesson,
+            artifact_type=LessonArtifact.ArtifactType.VIDEO,
+            content="https://www.youtube.com/watch?v=rfscVS0vtbw",
+            position=1,
+        )
+        version.status = CourseVersion.Status.PUBLISHED
+        version.save(update_fields=["status"])
+        Enrollment.objects.create(course=self.course, course_version=version, student=self.student)
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse("courses:learn-lesson", kwargs={"slug": self.course.slug, "lesson_id": lesson.id}))
+
+        self.assertContains(response, "<h2>A useful heading</h2>", html=True)
+        self.assertContains(response, "https://www.youtube-nocookie.com/embed/rfscVS0vtbw")
+
+    @override_settings(CELERY_TASK_ALWAYS_EAGER=True, AI_LLM_PROVIDER="fake")
+    def test_student_can_submit_final_project_and_receive_review_notification(self):
+        version = CourseVersion.objects.create(course=self.course, version_number=2, status=CourseVersion.Status.DRAFT)
+        module = Module.objects.create(course_version=version, title="Final module", position=1)
+        lesson = LessonVersion.objects.create(
+            module=module,
+            title="Final lesson",
+            objectives=["Finish the project"],
+            content="Prepare your final project.",
+            position=1,
+            status=LessonVersion.Status.PUBLISHED,
+        )
+        project = FinalProject.objects.create(
+            course_version=version,
+            title="Build a calculator",
+            brief="Build and explain a small calculator program for your class.",
+            objectives=["Use Python"],
+            requirements=["Write Python code"],
+            deliverables=["A project link"],
+            rubric=[{"criterion": "Uses the required concept", "weight": 100}],
+        )
+        version.status = CourseVersion.Status.PUBLISHED
+        version.save(update_fields=["status"])
+        enrollment = Enrollment.objects.create(course=self.course, course_version=version, student=self.student)
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse("courses:learn-lesson", kwargs={"slug": self.course.slug, "lesson_id": lesson.id}))
+        self.assertContains(response, "Submit your project for AI review")
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(
+                reverse("courses:submit-final-project", kwargs={"slug": self.course.slug}),
+                {"answer_text": "https://example.com/my-calculator-project with a short explanation."},
+            )
+
+        self.assertRedirects(
+            response,
+            reverse("courses:learn-lesson", kwargs={"slug": self.course.slug, "lesson_id": lesson.id}),
+        )
+        submission = project.submissions.get(enrollment=enrollment)
+        job = AIJob.objects.get(entity_id=submission.id)
+        self.assertEqual(job.status, AIJob.Status.SUCCEEDED, job.error_message)
+        self.assertEqual(submission.status, "reviewed")
+        self.assertEqual(submission.suggested_score, 60)
+        self.assertTrue(self.student.notifications.filter(notification_type="project_reviewed").exists())
 
 
 class CourseAuthoringTests(TestCase):

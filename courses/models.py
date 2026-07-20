@@ -1,10 +1,12 @@
 import uuid
 
 from django.conf import settings
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.text import slugify
 
+from ai_engine.fields import EncryptedTextField
 from organizations.models import Organization
 
 
@@ -98,6 +100,62 @@ class FinalProject(models.Model):
         return super().delete(*args, **kwargs)
 
 
+class ProjectSubmission(models.Model):
+    class Status(models.TextChoices):
+        SUBMITTED = "submitted", "Submitted"
+        EVALUATING = "evaluating", "Being reviewed"
+        REVIEWED = "reviewed", "Reviewed"
+        FAILED = "failed", "Review unavailable"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    final_project = models.ForeignKey(FinalProject, on_delete=models.PROTECT, related_name="submissions")
+    enrollment = models.ForeignKey("enrollments.Enrollment", on_delete=models.PROTECT, related_name="project_submissions")
+    answer_text = EncryptedTextField()
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.SUBMITTED)
+    suggested_score = models.PositiveSmallIntegerField(null=True, blank=True)
+    confidence = models.DecimalField(max_digits=4, decimal_places=3, null=True, blank=True)
+    strengths = models.JSONField(default=list, blank=True)
+    errors = models.JSONField(default=list, blank=True)
+    feedback = models.TextField(blank=True)
+    remediation = models.TextField(blank=True)
+    provider = models.CharField(max_length=40, blank=True)
+    model = models.CharField(max_length=100, blank=True)
+    submitted_at = models.DateTimeField(auto_now_add=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["final_project", "enrollment"],
+                name="unique_final_project_submission_per_enrollment",
+            ),
+        ]
+        ordering = ["-submitted_at"]
+
+    def clean(self):
+        if self.enrollment_id and self.final_project_id and self.enrollment.course_version_id != self.final_project.course_version_id:
+            raise ValidationError("This final project does not belong to the learner's enrolled course version.")
+
+
+class LessonFeedback(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    enrollment = models.ForeignKey("enrollments.Enrollment", on_delete=models.CASCADE, related_name="lesson_feedback")
+    lesson_version = models.ForeignKey("courses.LessonVersion", on_delete=models.CASCADE, related_name="learner_feedback")
+    rating = models.PositiveSmallIntegerField(validators=[MinValueValidator(1), MaxValueValidator(5)])
+    comment = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["enrollment", "lesson_version"],
+                name="unique_lesson_feedback_per_enrollment",
+            ),
+        ]
+        ordering = ["-updated_at"]
+
+
 class Module(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     course_version = models.ForeignKey(CourseVersion, on_delete=models.CASCADE, related_name="modules")
@@ -162,8 +220,6 @@ class LessonArtifact(models.Model):
         IMAGE = "image", "Image"
         SIMULATION = "simulation_link", "Simulation link"
         CODE = "code_example", "Code example"
-        IMAGE_PROMPT = "image_prompt", "Image prompt"
-        YOUTUBE_SEARCH = "youtube_search", "YouTube search suggestion"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     lesson_version = models.ForeignKey(LessonVersion, on_delete=models.CASCADE, related_name="artifacts")

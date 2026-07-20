@@ -14,6 +14,8 @@ from assessments.services import (
     record_grade_event,
     should_auto_confirm,
 )
+from courses.models import ProjectSubmission
+from notifications.models import Notification
 
 from .course_generation import persist_generation_result
 from .models import AIJob, AIUsageEvent, CourseGenerationRequest
@@ -178,6 +180,116 @@ def _record_failure(job, attempt, message):
             "AI grading failed; manual review required",
             assigned_to=attempt.question.lesson_version.module.course_version.course.created_by,
         )
+
+
+@shared_task(
+    bind=True,
+    autoretry_for=(ProviderError,),
+    retry_backoff=True,
+    retry_backoff_max=120,
+    retry_jitter=True,
+    max_retries=3,
+)
+def grade_project_submission(self, job_id):
+    job = AIJob.objects.get(id=job_id)
+    if job.status == AIJob.Status.SUCCEEDED:
+        return {"job_id": str(job.id), "status": job.status}
+
+    with transaction.atomic():
+        job = AIJob.objects.select_for_update().get(id=job_id)
+        submission = ProjectSubmission.objects.select_for_update().select_related(
+            "final_project__course_version__course", "enrollment__student"
+        ).get(id=job.entity_id)
+        job.status = AIJob.Status.RUNNING
+        job.progress = 10
+        job.started_at = job.started_at or timezone.now()
+        job.retry_count = self.request.retries
+        job.error_message = ""
+        job.save(update_fields=["status", "progress", "started_at", "retry_count", "error_message"])
+        submission.status = ProjectSubmission.Status.EVALUATING
+        submission.save(update_fields=["status"])
+
+    final_project = submission.final_project
+    project_prompt = (
+        f"Final project title: {final_project.title}\n\n"
+        f"Brief:\n{final_project.brief}\n\n"
+        f"Requirements:\n" + "\n".join(f"- {item}" for item in final_project.requirements) + "\n\n"
+        "Expected deliverables:\n" + "\n".join(f"- {item}" for item in final_project.deliverables)
+    )
+    try:
+        provider = get_grading_provider()
+        provider_grade = provider.grade(
+            question=project_prompt,
+            answer=submission.answer_text,
+            rubric=final_project.rubric,
+            execution_context={},
+        )
+    except ProviderError as exc:
+        _record_project_grading_failure(job, submission, str(exc))
+        raise
+
+    result = provider_grade.result
+    moderate_payload(result.model_dump(mode="json"), field_name="Final project grading feedback")
+    estimated_cost = _estimate_cost(provider_grade.input_tokens, provider_grade.output_tokens)
+    with transaction.atomic():
+        submission = ProjectSubmission.objects.select_for_update().get(id=submission.id)
+        submission.status = ProjectSubmission.Status.REVIEWED
+        submission.suggested_score = result.score
+        submission.confidence = result.confidence
+        submission.strengths = result.strengths
+        submission.errors = result.errors
+        submission.feedback = result.feedback
+        submission.remediation = result.remediation
+        submission.provider = provider_grade.provider
+        submission.model = provider_grade.model
+        submission.reviewed_at = timezone.now()
+        submission.save(
+            update_fields=[
+                "status", "suggested_score", "confidence", "strengths", "errors", "feedback", "remediation",
+                "provider", "model", "reviewed_at",
+            ]
+        )
+        AIUsageEvent.objects.create(
+            job=job,
+            provider=provider_grade.provider,
+            model=provider_grade.model,
+            input_tokens=provider_grade.input_tokens,
+            output_tokens=provider_grade.output_tokens,
+            estimated_cost=estimated_cost,
+        )
+        job.status = AIJob.Status.SUCCEEDED
+        job.progress = 100
+        job.provider = provider_grade.provider
+        job.model = provider_grade.model
+        job.prompt_version = settings.AI_PROMPT_VERSION
+        job.input_tokens = provider_grade.input_tokens
+        job.output_tokens = provider_grade.output_tokens
+        job.estimated_cost = estimated_cost
+        job.completed_at = timezone.now()
+        job.save(
+            update_fields=[
+                "status", "progress", "provider", "model", "prompt_version", "input_tokens", "output_tokens",
+                "estimated_cost", "completed_at",
+            ]
+        )
+        Notification.objects.create(
+            recipient=submission.enrollment.student,
+            notification_type="project_reviewed",
+            title="Your final project has been reviewed",
+            body=f"AI review for {final_project.title} is ready. Suggested score: {result.score}%.",
+        )
+    return {"job_id": str(job.id), "status": job.status}
+
+
+def _record_project_grading_failure(job, submission, message):
+    logger.error("Final project grading job %s failed: %s", job.id, message)
+    with transaction.atomic():
+        job.status = AIJob.Status.FAILED
+        job.error_message = message
+        job.completed_at = timezone.now()
+        job.save(update_fields=["status", "error_message", "completed_at"])
+        submission.status = ProjectSubmission.Status.FAILED
+        submission.save(update_fields=["status"])
 
 
 @shared_task(

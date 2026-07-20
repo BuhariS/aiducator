@@ -7,6 +7,8 @@ from .views import (
     enroll,
     learn,
     mark_lesson_complete_view,
+    submit_final_project,
+    submit_lesson_feedback,
     unenroll,
 )
 
@@ -20,6 +22,8 @@ urlpatterns = [
     path("<slug:slug>/learn/", learn, name="learn"),
     path("<slug:slug>/learn/<uuid:lesson_id>/", learn, name="learn-lesson"),
     path("<slug:slug>/learn/<uuid:lesson_id>/complete/", mark_lesson_complete_view, name="complete-lesson"),
+    path("<slug:slug>/learn/<uuid:lesson_id>/feedback/", submit_lesson_feedback, name="lesson-feedback"),
+    path("<slug:slug>/learn/final-project/submit/", submit_final_project, name="submit-final-project"),
     path("dashboard/student/", RedirectView.as_view(pattern_name="dashboard:student-dashboard"), name="student-dashboard"),
     path("dashboard/teacher/", RedirectView.as_view(pattern_name="dashboard:teacher-dashboard"), name="teacher-dashboard"),
     path("<slug:slug>/studio/", RedirectView.as_view(pattern_name="teacher_courses:studio"), name="studio"),

@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Course, CourseVersion, FinalProject, Lesson, LessonArtifact, LessonVersion, Module, Translation
+from .models import Course, CourseVersion, FinalProject, Lesson, LessonArtifact, LessonFeedback, LessonVersion, Module, ProjectSubmission, Translation
 
 
 @admin.register(Course)
@@ -25,6 +25,22 @@ class FinalProjectAdmin(admin.ModelAdmin):
     list_display = ("title", "course_version", "ai_generated", "teacher_approved", "estimated_hours", "updated_at")
     list_filter = ("ai_generated", "teacher_approved")
     search_fields = ("title", "brief", "course_version__course__title")
+    readonly_fields = ("id", "created_at", "updated_at")
+
+
+@admin.register(ProjectSubmission)
+class ProjectSubmissionAdmin(admin.ModelAdmin):
+    list_display = ("final_project", "enrollment", "status", "suggested_score", "submitted_at", "reviewed_at")
+    list_filter = ("status",)
+    search_fields = ("final_project__title", "enrollment__student__email")
+    readonly_fields = ("id", "submitted_at", "reviewed_at")
+
+
+@admin.register(LessonFeedback)
+class LessonFeedbackAdmin(admin.ModelAdmin):
+    list_display = ("lesson_version", "enrollment", "rating", "updated_at")
+    list_filter = ("rating",)
+    search_fields = ("lesson_version__title", "enrollment__student__email", "comment")
     readonly_fields = ("id", "created_at", "updated_at")
 
 
