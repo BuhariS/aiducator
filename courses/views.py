@@ -518,6 +518,7 @@ def course_studio(request, slug):
             "versions": versions,
             "draft_version": versions.filter(status=CourseVersion.Status.DRAFT).first(),
             "can_delete": course.created_by_id == request.user.id or user_has_admin_access(request.user, course.organization),
+            "can_archive": course.status == Course.Status.PUBLISHED,
         },
     )
 
@@ -547,14 +548,38 @@ def course_settings(request, slug):
 
 @login_required
 @require_POST
+def archive_course(request, slug):
+    course = get_object_or_404(Course, slug=slug)
+    if not user_has_teacher_access(request.user, course.organization):
+        return HttpResponseForbidden("You do not have access to archive this course.")
+    if course.status != Course.Status.PUBLISHED:
+        messages.error(request, "Only published courses can be archived.")
+        return redirect("teacher_courses:studio", slug=course.slug)
+
+    with transaction.atomic():
+        course.status = Course.Status.ARCHIVED
+        course.save(update_fields=["status", "updated_at"])
+        record_audit_event(
+            action="course_archived",
+            actor=request.user,
+            obj=course,
+            request=request,
+            metadata={"course_id": str(course.id)},
+        )
+    messages.success(request, f'Course "{course.title}" was archived and is no longer available for enrollment.')
+    return redirect("teacher_courses:studio", slug=course.slug)
+
+
+@login_required
+@require_POST
 def delete_course(request, slug):
     course = get_object_or_404(Course, slug=slug)
     if not user_has_teacher_access(request.user, course.organization):
         return HttpResponseForbidden("You do not have access to delete this course.")
     if course.created_by_id != request.user.id and not user_has_admin_access(request.user, course.organization):
         return HttpResponseForbidden("Only the course creator or an organization administrator can delete this course.")
-    if course.status != Course.Status.DRAFT:
-        messages.error(request, "Only draft courses can be deleted. Published courses must be archived instead.")
+    if course.status not in {Course.Status.DRAFT, Course.Status.ARCHIVED}:
+        messages.error(request, "Only draft or archived courses can be deleted. Published courses must be archived first.")
         return redirect("teacher_courses:studio", slug=course.slug)
     if course.enrollments.exists():
         messages.error(request, "This course cannot be deleted because learners are enrolled in it.")

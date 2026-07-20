@@ -3,6 +3,7 @@ from django.urls import path
 from courses.views import (
     add_module,
     artifact_form,
+    archive_course,
     course_studio,
     course_settings,
     create_course,
@@ -34,6 +35,7 @@ urlpatterns = [
     path("generate/<uuid:request_id>/status/", generation_status, name="generation-status"),
     path("<slug:slug>/studio/", course_studio, name="studio"),
     path("<slug:slug>/settings/", course_settings, name="settings"),
+    path("<slug:slug>/archive/", archive_course, name="archive"),
     path("<slug:slug>/delete/", delete_course, name="delete"),
     path("<slug:slug>/studio/versions/new/", create_course_version, name="create-version"),
     path("<slug:slug>/studio/versions/<uuid:version_id>/", version_editor, name="version-editor"),

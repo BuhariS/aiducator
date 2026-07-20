@@ -34,6 +34,17 @@ class CourseFlowTests(TestCase):
         self.assertRedirects(response, reverse("courses:learn", kwargs={"slug": self.course.slug}))
         self.assertEqual(self.course.enrollments.count(), 1)
 
+    def test_archived_courses_are_hidden_from_the_catalog_and_cannot_be_enrolled(self):
+        self.course.status = Course.Status.ARCHIVED
+        self.course.save(update_fields=["status"])
+
+        catalog_response = self.client.get(reverse("courses:catalog"))
+        self.assertNotContains(catalog_response, self.course.title)
+
+        self.client.force_login(self.student)
+        enroll_response = self.client.post(reverse("courses:enroll", kwargs={"slug": self.course.slug}))
+        self.assertEqual(enroll_response.status_code, 404)
+
     def _completed_enrollment_with_average(self, score):
         version = CourseVersion.objects.create(course=self.course, version_number=2, status=CourseVersion.Status.DRAFT)
         module = Module.objects.create(course_version=version, title="Assessment", position=1)
@@ -588,6 +599,48 @@ class CourseAuthoringTests(TestCase):
         self.course.status = Course.Status.PUBLISHED
         self.course.save(update_fields=["status"])
         response = self.client.post(reverse("teacher_courses:delete", kwargs={"slug": self.course.slug}))
+        self.assertRedirects(response, reverse("teacher_courses:studio", kwargs={"slug": self.course.slug}))
+        self.assertTrue(Course.objects.filter(id=self.course.id).exists())
+
+    def test_teacher_can_archive_a_published_course_without_changing_its_version(self):
+        self.course.status = Course.Status.PUBLISHED
+        self.course.save(update_fields=["status"])
+        version = CourseVersion.objects.create(
+            course=self.course,
+            version_number=1,
+            status=CourseVersion.Status.PUBLISHED,
+        )
+
+        studio_response = self.client.get(reverse("teacher_courses:studio", kwargs={"slug": self.course.slug}))
+        self.assertContains(studio_response, "Archive course")
+
+        response = self.client.post(reverse("teacher_courses:archive", kwargs={"slug": self.course.slug}))
+
+        self.assertRedirects(response, reverse("teacher_courses:studio", kwargs={"slug": self.course.slug}))
+        self.course.refresh_from_db()
+        version.refresh_from_db()
+        self.assertEqual(self.course.status, Course.Status.ARCHIVED)
+        self.assertEqual(version.status, CourseVersion.Status.PUBLISHED)
+        self.assertTrue(AuditEvent.objects.filter(action="course_archived", entity_id=self.course.id).exists())
+
+    def test_archived_course_can_be_deleted_only_without_enrollments(self):
+        self.course.status = Course.Status.ARCHIVED
+        self.course.save(update_fields=["status"])
+
+        response = self.client.post(reverse("teacher_courses:delete", kwargs={"slug": self.course.slug}))
+
+        self.assertRedirects(response, reverse("dashboard:teacher-dashboard"))
+        self.assertFalse(Course.objects.filter(id=self.course.id).exists())
+
+    def test_archived_course_with_enrollments_cannot_be_deleted(self):
+        self.course.status = Course.Status.ARCHIVED
+        self.course.save(update_fields=["status"])
+        version = CourseVersion.objects.create(course=self.course, version_number=1, status=CourseVersion.Status.DRAFT)
+        student = User.objects.create_user(email="archived-student@example.com", password="StrongPass123!")
+        Enrollment.objects.create(course=self.course, course_version=version, student=student)
+
+        response = self.client.post(reverse("teacher_courses:delete", kwargs={"slug": self.course.slug}))
+
         self.assertRedirects(response, reverse("teacher_courses:studio", kwargs={"slug": self.course.slug}))
         self.assertTrue(Course.objects.filter(id=self.course.id).exists())
 
