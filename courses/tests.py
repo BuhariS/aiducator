@@ -626,6 +626,11 @@ class CourseAuthoringTests(TestCase):
     def test_archived_course_can_be_deleted_only_without_enrollments(self):
         self.course.status = Course.Status.ARCHIVED
         self.course.save(update_fields=["status"])
+        CourseVersion.objects.create(
+            course=self.course,
+            version_number=1,
+            status=CourseVersion.Status.PUBLISHED,
+        )
 
         response = self.client.post(reverse("teacher_courses:delete", kwargs={"slug": self.course.slug}))
 

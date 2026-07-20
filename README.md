@@ -14,7 +14,7 @@ uv run python manage.py runserver
 
 The default local database is SQLite. For PostgreSQL, start the bundled service with `docker compose up -d postgres` and set `DATABASE_URL=postgresql://aiducator:aiducator@localhost:5432/aiducator` in `.env`. Redis is available with `docker compose up -d redis`.
 
-Create accounts at `/accounts/signup/`, or use the role-specific entry points `/accounts/signup/student/` and `/accounts/signup/teacher/`. Teacher signup creates a private organization workspace; every account receives the corresponding student or teacher membership.
+Create accounts at `/accounts/signup/`, or use the role-specific entry points `/accounts/signup/student/` and `/accounts/signup/teacher/`. Teacher signup requires a school or organization name and creates that organization plus a teacher membership. Student signup creates a personal learning organization plus a student membership. Students and teachers are associated through these organization memberships.
 
 Seed the first Python course and demo accounts:
 
@@ -23,6 +23,22 @@ uv run python manage.py seed_python_course
 ```
 
 New demo accounts use `Aiducator123!` unless `AIDUCATOR_SEED_PASSWORD` is set before running the command. The command is safe to run repeatedly.
+
+## Local database reset and demo data
+
+For the default local SQLite database only, stop the development server, move the existing database to a timestamped backup, then migrate and seed fresh demo data:
+
+```bash
+mv db.sqlite3 "db.sqlite3.backup.$(date +%Y%m%d%H%M%S)"
+uv run python manage.py migrate
+uv run python manage.py seed_python_course
+```
+
+Do not run these commands against a shared or production database. For PostgreSQL, use an environment-specific backup and reset procedure instead.
+
+## Course publishing and archive lifecycle
+
+Draft courses can be deleted when no learner is enrolled. Published courses and their published versions are immutable, so a published course must be archived rather than deleted. Archiving removes the course from the catalog and prevents new enrollment while retaining its teaching history. An archived course can be deleted only when it has no enrollments.
 
 Install the frontend dependency and build Tailwind CSS:
 
@@ -41,7 +57,7 @@ Gamification event rules and teacher/administrator analytics are documented in `
 
 ## AI grading worker
 
-Copy `.env.example` to `.env`. The default `fake` provider is safe for local development. To use OpenAI, set `AI_LLM_PROVIDER=openai` and provide `OPENAI_API_KEY` in `.env`. Keep the key server-side and never expose it to templates or JavaScript.
+Copy `.env.example` to `.env`. The default `fake` provider is safe for local development. The only supported `AI_LLM_PROVIDER` values are `fake` and `openai`. To use OpenAI, set `AI_LLM_PROVIDER=openai` and provide a non-empty `OPENAI_API_KEY` in `.env`; the app fails at startup if this configuration is missing or unsupported. Keep the key server-side and never expose it to templates or JavaScript.
 
 In local debug mode, generation runs eagerly by default, so Redis and a worker are optional. To run the production-style asynchronous workflow, set `CELERY_TASK_ALWAYS_EAGER=0`, then start Redis and the Django worker in separate terminals:
 
