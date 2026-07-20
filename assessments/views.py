@@ -3,7 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Prefetch, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.http import require_POST
@@ -29,6 +29,7 @@ from .models import (
     GradeEvent,
     Question,
     ReviewQueueItem,
+    RubricVersion,
     Submission,
 )
 from .services import confirm_attempt_grade, queue_manual_review, record_grade_event
@@ -297,9 +298,20 @@ def review_queue(request):
             "attempt__enrollment__student",
             "attempt__ai_grade",
         )
+        .prefetch_related(
+            Prefetch(
+                "attempt__question__rubrics",
+                queryset=RubricVersion.objects.filter(approved_by__isnull=False).order_by("-version_number"),
+                to_attr="ai_grading_rubrics",
+            )
+        )
         .order_by("created_at")
         .distinct()
     )
+    items = list(items)
+    for item in items:
+        approved_rubrics = item.attempt.question.ai_grading_rubrics
+        item.ai_grading_rubric = approved_rubrics[0] if approved_rubrics else None
     return render(request, "assessments/review_queue.html", {"review_items": items})
 
 

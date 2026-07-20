@@ -104,6 +104,8 @@ class AttemptFlowTests(TestCase):
         self.client.force_login(self.teacher)
         response = self.client.get(reverse("assessments:review-queue"))
         self.assertContains(response, 'aria-label="1 unread notifications"')
+        self.assertContains(response, "AI grading rubric used")
+        self.assertContains(response, "Explains storage of a value")
 
     def test_submission_advances_to_the_next_assessment_in_the_same_lesson(self):
         Question.objects.filter(pk=self.next_question.pk).update(is_active=True)
