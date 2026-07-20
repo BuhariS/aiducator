@@ -5,7 +5,6 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 GENERATED_ARTIFACT_TYPES = Literal[
     "text",
-    "video_embed",
     "image",
     "simulation_link",
     "code_example",

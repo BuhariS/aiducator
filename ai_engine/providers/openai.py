@@ -150,14 +150,6 @@ class OpenAICourseGenerationProvider:
                 ),
                 input=prompt,
                 text_format=CourseGenerationResult,
-                tools=[
-                    {
-                        "type": "web_search",
-                        "search_context_size": "low",
-                        "filters": {"allowed_domains": ["youtube.com", "youtu.be"]},
-                    }
-                ],
-                tool_choice="required",
                 store=False,
             )
         except Exception as exc:
@@ -181,11 +173,8 @@ class OpenAICourseGenerationProvider:
         return (
             "Create a teacher-reviewable draft course. Include lesson explanations, learning objectives, "
             "and assessment questions with rubrics. Add learning materials only when they meaningfully help "
-            "that particular lesson; do not pad every lesson with every material type. Never create image prompts. "
-            "When a video would materially help, use the available web search tool to find one highly relevant "
-            "direct YouTube video and return it as one video_embed artifact. Its content must be a direct YouTube "
-            "watch, short, or embed URL for that video, never a YouTube search-results URL or a search query. "
-            "Do not include a video artifact when no suitable video can be verified. "
+            "that particular lesson; do not pad every lesson with every material type. Never create image prompts "
+            "or video artifacts. Teachers can add video URLs manually during their review. "
             "Use the supported question types: scenario, "
             "critical_thinking, task_prompt, misconception, error_identification, explanation, "
             "code_writing, debugging, and reflection. Also create one practical final project with "

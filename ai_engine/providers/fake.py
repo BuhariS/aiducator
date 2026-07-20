@@ -111,15 +111,6 @@ class FakeCourseGenerationProvider:
                                         "search_terms": [],
                                     },
                                 },
-                                {
-                                    "artifact_type": "video_embed",
-                                    "content": "https://www.youtube.com/watch?v=rfscVS0vtbw",
-                                    "metadata": {
-                                        "language": "",
-                                        "purpose": "A supporting beginner-friendly Python video.",
-                                        "search_terms": ["Python", "beginner tutorial"],
-                                    },
-                                },
                             ],
                             "questions": [
                                 {
