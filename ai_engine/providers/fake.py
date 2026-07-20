@@ -112,21 +112,12 @@ class FakeCourseGenerationProvider:
                                     },
                                 },
                                 {
-                                    "artifact_type": "image_prompt",
-                                    "content": "A clear classroom illustration of a Python value stored in a labelled box.",
+                                    "artifact_type": "video_embed",
+                                    "content": "https://www.youtube.com/watch?v=rfscVS0vtbw",
                                     "metadata": {
                                         "language": "",
-                                        "purpose": "Future image generation.",
-                                        "search_terms": [],
-                                    },
-                                },
-                                {
-                                    "artifact_type": "youtube_search",
-                                    "content": f"Python {lesson_title.lower()} for beginners",
-                                    "metadata": {
-                                        "language": "",
-                                        "purpose": "Find a suitable supporting video.",
-                                        "search_terms": ["Python", lesson_title],
+                                        "purpose": "A supporting beginner-friendly Python video.",
+                                        "search_terms": ["Python", "beginner tutorial"],
                                     },
                                 },
                             ],

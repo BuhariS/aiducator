@@ -9,8 +9,6 @@ GENERATED_ARTIFACT_TYPES = Literal[
     "image",
     "simulation_link",
     "code_example",
-    "image_prompt",
-    "youtube_search",
 ]
 
 GENERATED_QUESTION_TYPES = Literal[
@@ -133,7 +131,9 @@ class GeneratedLesson(StructuredOutputModel):
     title: str = Field(min_length=3, max_length=180)
     objectives: list[str] = Field(min_length=1, max_length=8)
     content: str = Field(min_length=30, max_length=20000)
-    artifacts: list[GeneratedArtifact] = Field(default_factory=list, max_length=20)
+    # Materials are optional: a strong lesson should not be padded with every
+    # possible type of resource.
+    artifacts: list[GeneratedArtifact] = Field(default_factory=list, max_length=6)
     questions: list[GeneratedQuestion] = Field(min_length=1, max_length=12)
 
     _safe_title = field_validator("title")(_reject_unsafe_text)

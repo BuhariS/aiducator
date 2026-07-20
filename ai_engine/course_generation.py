@@ -14,7 +14,7 @@ from courses.models import (
 
 from .models import CourseGenerationRequest
 from .schemas import CourseGenerationResult
-from .security import allowed_embed_url, moderate_payload, sanitize_html
+from .security import allowed_embed_url, is_youtube_video_url, moderate_payload, sanitize_html
 
 
 def validate_generation_result(result) -> CourseGenerationResult:
@@ -34,6 +34,8 @@ def validate_generation_result(result) -> CourseGenerationResult:
                     artifact.content = sanitize_html(artifact.content)
                 if artifact.artifact_type in {"image", "video_embed", "simulation_link"}:
                     allowed_embed_url(artifact.content, field_name="Generated media URL")
+                if artifact.artifact_type == "video_embed" and not is_youtube_video_url(artifact.content):
+                    raise ValidationError("Generated videos must use a direct YouTube video URL.")
     return validated
 
 

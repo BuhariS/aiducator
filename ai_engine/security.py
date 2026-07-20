@@ -103,5 +103,20 @@ def allowed_embed_url(value: str, *, field_name: str = "URL") -> str:
     return value.strip()
 
 
+def is_youtube_video_url(value: str) -> bool:
+    """Return whether a URL points to a specific YouTube video, not a search page."""
+    parsed = urlparse(value.strip())
+    host = (parsed.hostname or "").lower().removeprefix("www.").rstrip(".")
+    if parsed.scheme != "https" or parsed.username or parsed.password or parsed.port:
+        return False
+    if host == "youtu.be":
+        return bool(parsed.path.strip("/"))
+    if host != "youtube.com":
+        return False
+    if parsed.path == "/watch":
+        return bool(parsed.query and "v=" in parsed.query)
+    return parsed.path.startswith("/embed/") or parsed.path.startswith("/shorts/")
+
+
 def content_hash(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
