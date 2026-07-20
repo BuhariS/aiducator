@@ -1,4 +1,6 @@
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from accounts.models import User
@@ -7,7 +9,7 @@ from enrollments.models import CourseCompletion, Enrollment, LessonProgress
 from organizations.models import Membership, Organization
 
 from .models import LessonTimeEvent
-from .services import teacher_course_metrics
+from .services import teacher_analytics, teacher_course_metrics
 
 
 class AnalyticsAccessTests(TestCase):
@@ -132,3 +134,17 @@ class AnalyticsAccessTests(TestCase):
         self.assertEqual(metrics["completion_rate"], 100.0)
         self.assertEqual(metrics["lesson_metrics"][0]["minutes"], 3.0)
         self.assertEqual(metrics["lesson_metrics"][0]["dropoff_rate"], 0.0)
+
+    def test_teacher_analytics_uses_a_fixed_number_of_bulk_queries(self):
+        Course.objects.create(
+            organization=self.organization,
+            created_by=self.teacher,
+            title="Second analytics course",
+            slug="second-analytics-course",
+        )
+
+        with CaptureQueriesContext(connection) as queries:
+            metrics = teacher_analytics(self.teacher)
+
+        self.assertEqual(len(metrics), 2)
+        self.assertLessEqual(len(queries), 7)

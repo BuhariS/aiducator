@@ -1,16 +1,16 @@
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import timedelta
 from decimal import Decimal
 
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db.models import Avg, Q, Sum
+from django.db.models import Count, Q, Sum
 from django.utils import timezone
 
 from accounts.models import User
 from ai_engine.models import AIJob, AIUsageEvent, CourseGenerationRequest
-from assessments.models import AIGrade, Attempt, GradeDecision, ManualReview, ReviewQueueItem
+from assessments.models import AIGrade, Attempt, GradeDecision, ReviewQueueItem
 from courses.models import Course, LessonVersion
-from enrollments.models import CourseCompletion, Enrollment, LessonProgress
+from enrollments.models import Enrollment, LessonProgress
 
 from .models import LearningEvent, LessonTimeEvent
 
@@ -44,80 +44,135 @@ def record_lesson_time(*, student, enrollment, lesson, duration_seconds, metadat
 
 
 def teacher_course_metrics(course):
-    enrollments = Enrollment.objects.filter(course=course)
-    enrollment_count = enrollments.count()
-    completed_count = CourseCompletion.objects.filter(enrollment__in=enrollments).count()
-    decisions = GradeDecision.objects.filter(attempt__enrollment__in=enrollments)
-    average_score = decisions.aggregate(value=Avg("final_score"))["value"] or 0
-    passed_count = decisions.filter(final_score__gte=course.passing_score).count()
-    needing_help = enrollments.filter(
-        Q(lesson_progress__status=LessonProgress.Status.NEEDS_SUPPORT)
-        | Q(attempts__status__in=["needs_support", "remediation"])
-    ).distinct()
-    overridden_count = decisions.filter(status=GradeDecision.Status.OVERRIDDEN).count()
-
-    mistakes = Counter()
-    for errors in AIGrade.objects.filter(attempt__enrollment__in=enrollments).values_list(
-        "errors", flat=True
-    ):
-        for error in errors or []:
-            label = str(error).strip()
-            if label:
-                mistakes[label] += 1
-
-    disparities = []
-    for ai_score, final_score in AIGrade.objects.filter(
-        attempt__enrollment__in=enrollments,
-        attempt__grade_decision__isnull=False,
-    ).values_list("suggested_score", "attempt__grade_decision__final_score"):
-        disparities.append(abs(ai_score - final_score))
-
-    lessons = list(
-        LessonVersion.objects.filter(module__course_version__course=course)
-        .order_by("module__position", "position")
-        .values("id", "title")
-    )
-    lesson_metrics = []
-    for lesson in lessons:
-        progress = LessonProgress.objects.filter(
-            enrollment__in=enrollments, lesson_version_id=lesson["id"]
-        )
-        started = progress.exclude(status=LessonProgress.Status.NOT_STARTED).count()
-        completed = progress.filter(status=LessonProgress.Status.COMPLETED).count()
-        seconds = (
-            LessonTimeEvent.objects.filter(
-                enrollment__in=enrollments,
-                lesson_id=lesson["id"],
-            ).aggregate(value=Sum("duration_seconds"))["value"]
-            or 0
-        )
-        lesson_metrics.append(
-            {
-                "title": lesson["title"],
-                "started": started,
-                "completed": completed,
-                "dropoff_rate": round(100 - _percentage(completed, started), 1) if started else 0,
-                "minutes": round(seconds / 60, 1),
-            }
-        )
-
-    return {
-        "course": course,
-        "completion_rate": _percentage(completed_count, enrollment_count),
-        "enrollment_count": enrollment_count,
-        "assessment_average": round(float(average_score), 1),
-        "assessment_pass_rate": _percentage(passed_count, decisions.count()),
-        "common_mistakes": mistakes.most_common(5),
-        "students_needing_help": list(needing_help.select_related("student")),
-        "ai_overridden": overridden_count,
-        "ai_human_gap": round(sum(disparities) / len(disparities), 1) if disparities else 0,
-        "lesson_metrics": lesson_metrics,
-    }
+    return _teacher_metrics_for_courses(Course.objects.filter(id=course.id))[0]
 
 
 def teacher_analytics(user):
-    courses = Course.objects.filter(created_by=user).order_by("title")
-    return [teacher_course_metrics(course) for course in courses]
+    return _teacher_metrics_for_courses(Course.objects.filter(created_by=user).order_by("title"))
+
+
+def _teacher_metrics_for_courses(courses):
+    courses = list(
+        courses.annotate(
+            enrollment_count=Count("enrollments", distinct=True),
+            completed_enrollment_count=Count("enrollments__completion", distinct=True),
+        )
+    )
+    if not courses:
+        return []
+
+    course_ids = [course.id for course in courses]
+    course_by_id = {course.id: course for course in courses}
+    grade_stats = defaultdict(lambda: {"total": 0, "score_total": 0, "passed": 0, "overridden": 0})
+    for decision in GradeDecision.objects.filter(
+        attempt__enrollment__course_id__in=course_ids
+    ).values("attempt__enrollment__course_id", "final_score", "status"):
+        course_id = decision["attempt__enrollment__course_id"]
+        stats = grade_stats[course_id]
+        stats["total"] += 1
+        stats["score_total"] += decision["final_score"]
+        if decision["final_score"] >= course_by_id[course_id].passing_score:
+            stats["passed"] += 1
+        if decision["status"] == GradeDecision.Status.OVERRIDDEN:
+            stats["overridden"] += 1
+
+    mistakes_by_course = defaultdict(Counter)
+    disparities_by_course = defaultdict(list)
+    for grade in AIGrade.objects.filter(
+        attempt__enrollment__course_id__in=course_ids
+    ).values(
+        "attempt__enrollment__course_id",
+        "errors",
+        "suggested_score",
+        "attempt__grade_decision__final_score",
+    ):
+        course_id = grade["attempt__enrollment__course_id"]
+        for error in grade["errors"] or []:
+            label = str(error).strip()
+            if label:
+                mistakes_by_course[course_id][label] += 1
+        final_score = grade["attempt__grade_decision__final_score"]
+        if final_score is not None:
+            disparities_by_course[course_id].append(abs(grade["suggested_score"] - final_score))
+
+    learners_needing_help = defaultdict(list)
+    for enrollment in (
+        Enrollment.objects.filter(course_id__in=course_ids)
+        .filter(
+            Q(lesson_progress__status=LessonProgress.Status.NEEDS_SUPPORT)
+            | Q(attempts__status__in=["needs_support", "remediation"])
+        )
+        .select_related("student")
+        .distinct()
+        .order_by("student__email")
+    ):
+        learners_needing_help[enrollment.course_id].append(enrollment)
+
+    lessons_by_course = defaultdict(list)
+    lessons = list(
+        LessonVersion.objects.filter(module__course_version__course_id__in=course_ids)
+        .order_by("module__course_version__course_id", "module__position", "position")
+        .values("id", "title", "module__course_version__course_id")
+    )
+    lesson_ids = [lesson["id"] for lesson in lessons]
+    for lesson in lessons:
+        lessons_by_course[lesson["module__course_version__course_id"]].append(lesson)
+
+    progress_by_lesson = {
+        item["lesson_version_id"]: item
+        for item in LessonProgress.objects.filter(
+            enrollment__course_id__in=course_ids,
+            lesson_version_id__in=lesson_ids,
+        )
+        .values("lesson_version_id")
+        .annotate(
+            started=Count("id", filter=~Q(status=LessonProgress.Status.NOT_STARTED)),
+            completed=Count("id", filter=Q(status=LessonProgress.Status.COMPLETED)),
+        )
+    }
+    seconds_by_lesson = {
+        item["lesson_id"]: item["seconds"]
+        for item in LessonTimeEvent.objects.filter(
+            enrollment__course_id__in=course_ids,
+            lesson_id__in=lesson_ids,
+        )
+        .values("lesson_id")
+        .annotate(seconds=Sum("duration_seconds"))
+    }
+
+    metrics = []
+    for course in courses:
+        stats = grade_stats[course.id]
+        lesson_metrics = []
+        for lesson in lessons_by_course[course.id]:
+            progress = progress_by_lesson.get(lesson["id"], {})
+            started = progress.get("started", 0)
+            completed = progress.get("completed", 0)
+            lesson_metrics.append(
+                {
+                    "title": lesson["title"],
+                    "started": started,
+                    "completed": completed,
+                    "dropoff_rate": round(100 - _percentage(completed, started), 1) if started else 0,
+                    "minutes": round((seconds_by_lesson.get(lesson["id"]) or 0) / 60, 1),
+                }
+            )
+        disparities = disparities_by_course[course.id]
+        metrics.append(
+            {
+                "course": course,
+                "completion_rate": _percentage(course.completed_enrollment_count, course.enrollment_count),
+                "enrollment_count": course.enrollment_count,
+                "assessment_average": round(stats["score_total"] / stats["total"], 1) if stats["total"] else 0,
+                "assessment_pass_rate": _percentage(stats["passed"], stats["total"]),
+                "common_mistakes": mistakes_by_course[course.id].most_common(5),
+                "students_needing_help": learners_needing_help[course.id],
+                "ai_overridden": stats["overridden"],
+                "ai_human_gap": round(sum(disparities) / len(disparities), 1) if disparities else 0,
+                "lesson_metrics": lesson_metrics,
+            }
+        )
+    return metrics
 
 
 def analytics_analysis_payload(course_metrics):
@@ -152,8 +207,11 @@ def analytics_analysis_payload(course_metrics):
 
 def administrator_analytics(organizations):
     organization_ids = organizations.values("id")
-    courses = Course.objects.filter(organization_id__in=organization_ids)
-    enrollments = Enrollment.objects.filter(course__organization_id__in=organization_ids)
+    course_totals = Course.objects.filter(organization_id__in=organization_ids).aggregate(
+        course_count=Count("id", distinct=True),
+        enrollment_count=Count("enrollments", distinct=True),
+        completed_enrollments=Count("enrollments__completion", distinct=True),
+    )
     generation_ids = CourseGenerationRequest.objects.filter(
         course__organization_id__in=organization_ids,
     ).values("id")
@@ -164,20 +222,24 @@ def administrator_analytics(organizations):
         Q(entity_type="course_generation_request", entity_id__in=generation_ids)
         | Q(entity_type="attempt", entity_id__in=attempt_ids)
     )
-    total_jobs = jobs.count()
-    failed_jobs = jobs.filter(status=AIJob.Status.FAILED).count()
+    job_totals = jobs.aggregate(
+        total_jobs=Count("id"),
+        failed_jobs=Count("id", filter=Q(status=AIJob.Status.FAILED)),
+    )
     usage = AIUsageEvent.objects.filter(job__in=jobs).aggregate(
         input_tokens=Sum("input_tokens"),
         output_tokens=Sum("output_tokens"),
         estimated_cost=Sum("estimated_cost"),
     )
-    review_volume = ManualReview.objects.filter(
-        attempt__enrollment__course__organization_id__in=organization_ids
-    ).count()
-    open_reviews = ReviewQueueItem.objects.filter(
-        attempt__enrollment__course__organization_id__in=organization_ids,
-        status=ReviewQueueItem.Status.OPEN,
-    ).count()
+    review_totals = Attempt.objects.filter(
+        enrollment__course__organization_id__in=organization_ids
+    ).aggregate(
+        manual_review_volume=Count("manual_review"),
+        open_manual_reviews=Count(
+            "review_item",
+            filter=Q(review_item__status=ReviewQueueItem.Status.OPEN),
+        ),
+    )
     active_since = timezone.now() - timedelta(days=30)
     active_users = (
         User.objects.filter(
@@ -189,16 +251,14 @@ def administrator_analytics(organizations):
     )
     return {
         "active_users": active_users,
-        "course_count": courses.count(),
-        "enrollment_count": enrollments.count(),
-        "completed_enrollments": CourseCompletion.objects.filter(
-            enrollment__in=enrollments
-        ).count(),
-        "ai_request_volume": total_jobs,
-        "ai_error_rate": _percentage(failed_jobs, total_jobs),
+        "course_count": course_totals["course_count"],
+        "enrollment_count": course_totals["enrollment_count"],
+        "completed_enrollments": course_totals["completed_enrollments"],
+        "ai_request_volume": job_totals["total_jobs"],
+        "ai_error_rate": _percentage(job_totals["failed_jobs"], job_totals["total_jobs"]),
         "input_tokens": usage["input_tokens"] or 0,
         "output_tokens": usage["output_tokens"] or 0,
         "estimated_cost": usage["estimated_cost"] or Decimal("0"),
-        "manual_review_volume": review_volume,
-        "open_manual_reviews": open_reviews,
+        "manual_review_volume": review_totals["manual_review_volume"],
+        "open_manual_reviews": review_totals["open_manual_reviews"],
     }
