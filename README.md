@@ -1,6 +1,6 @@
 # Aiducator
 
-AI-assisted Python learning for Nigerian secondary-school students and teachers.
+AI-native Learning Management System (LMS) for AI era.
 
 ## Local setup
 
