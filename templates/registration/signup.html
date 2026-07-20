@@ -20,11 +20,15 @@
       {% csrf_token %}
       {{ form.non_field_errors }}
       {% for field in form %}
+        {% if field.is_hidden %}
+          {{ field }}
+        {% else %}
         <div>
           <label class="mb-2 block text-sm font-bold text-slate-700" for="{{ field.id_for_label }}">{{ field.label }}</label>
           {{ field }}
           {% for error in field.errors %}<p class="mt-1 text-sm text-red-600">{{ error }}</p>{% endfor %}
         </div>
+        {% endif %}
       {% endfor %}
       <button class="primary-button w-full" type="submit">{% include "components/icon.html" with icon="plus" icon_class="h-4 w-4" %}Create account</button>
     </form>
