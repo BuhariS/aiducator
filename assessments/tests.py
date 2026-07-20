@@ -13,6 +13,7 @@ from ai_engine.schemas import GradingResult
 from courses.models import Course, CourseVersion, LessonVersion, Module
 from enrollments.models import Enrollment
 from organizations.models import Membership, Organization
+from notifications.models import Notification
 
 from .models import (
     AccommodationRequest,
@@ -94,6 +95,15 @@ class AttemptFlowTests(TestCase):
         self.assertEqual(len(attempt.submission.content_hash), 64)
         self.assertTrue(GradeEvent.objects.filter(attempt=attempt, event_type=GradeEvent.EventType.SUBMITTED).exists())
         self.assertTrue(ManualReview.objects.filter(attempt=attempt, status=ManualReview.Status.OPEN).exists())
+        self.assertTrue(
+            Notification.objects.filter(
+                recipient=self.teacher,
+                notification_type="assessment_review_requested",
+            ).exists()
+        )
+        self.client.force_login(self.teacher)
+        response = self.client.get(reverse("assessments:review-queue"))
+        self.assertContains(response, 'aria-label="1 unread notifications"')
 
     def test_submission_advances_to_the_next_assessment_in_the_same_lesson(self):
         Question.objects.filter(pk=self.next_question.pk).update(is_active=True)

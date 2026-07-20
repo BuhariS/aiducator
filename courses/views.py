@@ -322,6 +322,9 @@ def student_dashboard(request):
     enrollments = list(
         Enrollment.objects.filter(student=request.user, status=Enrollment.Status.ACTIVE).select_related("course", "course_version")
     )
+    completed_enrollment_ids = set(
+        CourseCompletion.objects.filter(enrollment__in=enrollments).values_list("enrollment_id", flat=True)
+    )
     average_marks = {
         item["attempt__enrollment_id"]: item["average_mark"]
         for item in GradeDecision.objects.filter(attempt__enrollment__in=enrollments)
@@ -337,6 +340,13 @@ def student_dashboard(request):
         enrollment.progress_percentage = round((enrollment.progress_count / enrollment.lesson_count) * 100) if enrollment.lesson_count else 0
         average_mark = average_marks.get(enrollment.id)
         enrollment.average_mark = round(float(average_mark)) if average_mark is not None else None
+        enrollment.completion_outcome = None
+        if enrollment.id in completed_enrollment_ids:
+            enrollment.completion_outcome = (
+                "graduated"
+                if average_mark is not None and average_mark >= enrollment.course.passing_score
+                else "retry"
+            )
     return render(
         request,
         "courses/student_dashboard.html",

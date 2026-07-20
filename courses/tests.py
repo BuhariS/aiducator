@@ -6,7 +6,7 @@ from django.urls import reverse
 from accounts.models import User
 from ai_engine.models import AIJob, CourseGenerationRequest
 from analytics.models import AuditEvent
-from assessments.models import Attempt, Question, RubricVersion
+from assessments.models import Attempt, GradeDecision, Question, RubricVersion
 from enrollments.models import CourseCompletion, Enrollment
 from organizations.models import Membership, Organization
 
@@ -33,6 +33,51 @@ class CourseFlowTests(TestCase):
         response = self.client.post(reverse("courses:enroll", kwargs={"slug": self.course.slug}))
         self.assertRedirects(response, reverse("courses:learn", kwargs={"slug": self.course.slug}))
         self.assertEqual(self.course.enrollments.count(), 1)
+
+    def _completed_enrollment_with_average(self, score):
+        version = CourseVersion.objects.create(course=self.course, version_number=2, status=CourseVersion.Status.DRAFT)
+        module = Module.objects.create(course_version=version, title="Assessment", position=1)
+        lesson = LessonVersion.objects.create(module=module, title="Final check", content="Show what you learned.", position=1)
+        question = Question.objects.create(
+            lesson_version=lesson,
+            question_type=Question.QuestionType.EXPLANATION,
+            prompt="Explain the main concept.",
+        )
+        version.status = CourseVersion.Status.PUBLISHED
+        version.save(update_fields=["status"])
+        enrollment = Enrollment.objects.create(course=self.course, course_version=version, student=self.student)
+        attempt = Attempt.objects.create(
+            enrollment=enrollment,
+            question=question,
+            attempt_number=1,
+            answer_text="My completed answer.",
+            status=Attempt.Status.GRADED,
+        )
+        GradeDecision.objects.create(
+            attempt=attempt,
+            final_score=score,
+            status=GradeDecision.Status.CONFIRMED,
+        )
+        CourseCompletion.objects.create(enrollment=enrollment, confirmed_by=self.student)
+        return enrollment
+
+    def test_completed_course_card_shows_graduated_when_average_meets_pass_mark(self):
+        self._completed_enrollment_with_average(self.course.passing_score)
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse("dashboard:student-dashboard"))
+
+        self.assertContains(response, "Graduated")
+        self.assertNotContains(response, "Unenroll")
+
+    def test_completed_course_card_shows_retry_when_average_is_below_pass_mark(self):
+        self._completed_enrollment_with_average(self.course.passing_score - 1)
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse("dashboard:student-dashboard"))
+
+        self.assertContains(response, "Retry")
+        self.assertNotContains(response, "Unenroll")
 
     def test_course_map_marks_submitted_assessment_complete_while_awaiting_review(self):
         version = CourseVersion.objects.create(course=self.course, version_number=2, status=CourseVersion.Status.DRAFT)

@@ -31,6 +31,7 @@ def record_grade_event(attempt, event_type, *, actor=None, score=None, metadata=
 
 @transaction.atomic
 def queue_manual_review(attempt, reason, *, assigned_to=None):
+    course = attempt.question.lesson_version.module.course_version.course
     manual_review, _ = ManualReview.objects.update_or_create(
         attempt=attempt,
         defaults={
@@ -41,7 +42,7 @@ def queue_manual_review(attempt, reason, *, assigned_to=None):
             "resolved_at": None,
         },
     )
-    ReviewQueueItem.objects.update_or_create(
+    _, created = ReviewQueueItem.objects.update_or_create(
         attempt=attempt,
         defaults={
             "reason": reason[:120],
@@ -50,6 +51,16 @@ def queue_manual_review(attempt, reason, *, assigned_to=None):
             "resolved_at": None,
         },
     )
+    if created:
+        Notification.objects.create(
+            recipient=assigned_to or course.created_by,
+            notification_type="assessment_review_requested",
+            title="A student assessment needs review",
+            body=(
+                f"{attempt.enrollment.student.get_full_name() or attempt.enrollment.student.email} "
+                f"submitted an answer for {attempt.question.lesson_version.title}."
+            ),
+        )
     record_grade_event(attempt, GradeEvent.EventType.REVIEW_REQUESTED, metadata={"reason": reason})
     return manual_review
 
