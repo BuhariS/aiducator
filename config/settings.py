@@ -4,6 +4,8 @@ import os
 import dj_database_url
 import environ
 
+from .ai_provider import validate_ai_provider_configuration
+
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 environ.Env.read_env(BASE_DIR / ".env")
@@ -177,8 +179,11 @@ else:
         "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
     }
 
-AI_LLM_PROVIDER = os.environ.get("AI_LLM_PROVIDER", "fake")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+AI_LLM_PROVIDER = validate_ai_provider_configuration(
+    os.environ.get("AI_LLM_PROVIDER", "fake"),
+    OPENAI_API_KEY,
+)
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-5.6")
 # The OpenAI SDK treats an explicitly empty OPENAI_BASE_URL environment variable
 # as an endpoint override. Keep the official endpoint when the optional setting is

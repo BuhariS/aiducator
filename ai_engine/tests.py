@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ImproperlyConfigured, ValidationError
 from django.test import TestCase, override_settings
 
 from .providers.base import CourseGenerationInput
@@ -9,6 +9,20 @@ from .providers.openai import OpenAICourseGenerationProvider, OpenAIGradingProvi
 from .schemas import CourseGenerationResult, GradingResult
 from .fields import EncryptedTextField
 from .security import allowed_embed_url, moderate_text, reject_prompt_injection
+from config.ai_provider import validate_ai_provider_configuration
+
+
+class AIProviderConfigurationTests(TestCase):
+    def test_openai_provider_requires_an_api_key(self):
+        with self.assertRaisesMessage(ImproperlyConfigured, "OPENAI_API_KEY must be set"):
+            validate_ai_provider_configuration("openai", "")
+
+    def test_unsupported_provider_raises_a_clear_exception(self):
+        with self.assertRaisesMessage(ImproperlyConfigured, "Unsupported AI_LLM_PROVIDER 'unknown'"):
+            validate_ai_provider_configuration("unknown", "test-key")
+
+    def test_fake_provider_is_accepted(self):
+        self.assertEqual(validate_ai_provider_configuration("fake", ""), "fake")
 
 
 class OpenAIProviderTests(TestCase):
