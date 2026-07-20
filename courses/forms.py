@@ -60,12 +60,6 @@ class CourseGenerationForm(forms.Form):
         initial="Nigerian secondary-school students",
         widget=forms.TextInput(attrs={"placeholder": "Nigerian secondary-school students"}),
     )
-    translation_languages = forms.CharField(
-        required=False,
-        label="Translation languages",
-        help_text="Optional comma-separated language codes, for example yo-NG, ha-NG, ig-NG.",
-        widget=forms.TextInput(attrs={"placeholder": "yo-NG, ha-NG, ig-NG"}),
-    )
     free_prompt = forms.CharField(
         required=False,
         max_length=4_000,
@@ -82,13 +76,6 @@ class CourseGenerationForm(forms.Form):
         if Course.objects.filter(slug=slug).exists():
             raise forms.ValidationError("A course with this title already exists. Choose a different title.")
         return title
-
-    def clean_translation_languages(self):
-        value = self.cleaned_data.get("translation_languages", "")
-        languages = [item.strip() for item in value.split(",") if item.strip()]
-        if len(languages) > 12:
-            raise forms.ValidationError("Request no more than 12 translation languages.")
-        return languages
 
     def clean_objective(self):
         objective = clean_input(self.cleaned_data.get("objective", ""), field_name="Learning objective", max_length=2_000)
@@ -170,12 +157,6 @@ class ArtifactForm(forms.ModelForm):
 
 
 class LessonForm(forms.ModelForm):
-    objectives_text = forms.CharField(
-        label="Learning objectives",
-        help_text="Enter one objective per line.",
-        widget=forms.Textarea(attrs={"rows": 4, "placeholder": "Explain variables\nUse variables in a program"}),
-    )
-
     class Meta:
         model = LessonVersion
         fields = ("title", "position", "content")
@@ -184,24 +165,6 @@ class LessonForm(forms.ModelForm):
             "position": forms.NumberInput(attrs={"min": 1}),
             "content": forms.Textarea(attrs={"rows": 14, "maxlength": 20000, "placeholder": "Write the lesson explanation..."}),
         }
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if self.instance and self.instance.objectives:
-            self.fields["objectives_text"].initial = "\n".join(self.instance.objectives)
-
-    def clean_objectives_text(self):
-        objectives = [line.strip() for line in self.cleaned_data["objectives_text"].splitlines() if line.strip()]
-        if not objectives:
-            raise forms.ValidationError("Add at least one learning objective.")
-        return objectives
-
-    def save(self, commit=True):
-        lesson = super().save(commit=False)
-        lesson.objectives = self.cleaned_data["objectives_text"]
-        if commit:
-            lesson.save()
-        return lesson
 
 
 class FinalProjectForm(forms.ModelForm):

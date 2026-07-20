@@ -64,7 +64,7 @@
           <h2 class="mt-2 text-2xl font-black text-ink">Modules</h2>
           <p class="mt-2 text-sm text-slate-500">Group lessons into a sequence that makes sense for your learners.</p>
         </div>
-        <div class="flex flex-wrap gap-2"><a class="primary-button" href="{% url 'teacher_courses:add-module' course.slug version.id %}">{% include "components/icon.html" with icon="plus" icon_class="h-4 w-4" %}Add module</a>{% if modules %}<a class="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-ink hover:border-emerald hover:text-emerald" href="#lessons">{% include "components/icon.html" with icon="edit" icon_class="h-4 w-4" %}Edit modules</a>{% endif %}</div>
+        <div class="flex flex-wrap gap-2"><a class="primary-button" href="{% url 'teacher_courses:add-module' course.slug version.id %}">{% include "components/icon.html" with icon="plus" icon_class="h-4 w-4" %}Add module</a>{% if first_module %}<a class="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-ink hover:border-emerald hover:text-emerald" href="{% url 'teacher_courses:edit-module' course.slug version.id first_module.id %}">{% include "components/icon.html" with icon="edit" icon_class="h-4 w-4" %}Edit modules</a>{% endif %}</div>
       </div>
       {% if not modules %}
         <div class="surface-card border-dashed p-10 text-center">
@@ -86,7 +86,7 @@
             </div>
             <div class="flex flex-wrap gap-2">
               <a class="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-ink hover:border-emerald hover:text-emerald" href="{% url 'teacher_courses:create-lesson' course.slug version.id module.id %}">{% include "components/icon.html" with icon="plus" icon_class="h-4 w-4" %}Add lesson</a>
-              <a class="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-ink hover:border-emerald hover:text-emerald" href="{% url 'teacher_courses:edit-module' course.slug version.id module.id %}">{% include "components/icon.html" with icon="edit" icon_class="h-4 w-4" %}Edit module</a>
+              <a class="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-ink hover:border-emerald hover:text-emerald" href="{% url 'teacher_courses:edit-module' course.slug version.id module.id %}">{% include "components/icon.html" with icon="edit" icon_class="h-4 w-4" %}Edit module</a>
               <form method="post" action="{% url 'teacher_courses:delete-module' course.slug version.id module.id %}" onsubmit="return confirm('Remove this module and all of its lessons, materials, and assessments from the draft version?');">
                 {% csrf_token %}
                 <button class="inline-flex items-center gap-2 rounded-xl border border-red-200 px-4 py-2 text-sm font-bold text-red-600 hover:bg-red-50" type="submit">{% include "components/icon.html" with icon="trash" icon_class="h-4 w-4" %}Remove module</button>
@@ -118,14 +118,14 @@
                 <div class="mt-6 space-y-4">
                   <div id="lesson-{{ lesson.id }}-materials" class="scroll-mt-6 rounded-2xl border border-slate-100 bg-cloud/50 p-4">
                     <div class="flex items-center justify-between gap-4">
-                      <div><p class="text-sm font-black uppercase tracking-wider text-emerald">Learning materials</p><p class="mt-1 text-sm text-slate-500">{{ lesson.artifacts.all|length }} material{{ lesson.artifacts.all|length|pluralize }}</p></div>
+                      <div><p class="inline-flex items-center gap-2 text-base font-black uppercase tracking-[0.14em] text-emerald">{% include "components/icon.html" with icon="book-open" icon_class="h-4 w-4" %}Learning materials</p><p class="mt-1 text-sm text-slate-500">{{ lesson.artifacts.all|length }} material{{ lesson.artifacts.all|length|pluralize }}</p></div>
                       <div class="flex items-center gap-3"><a class="text-sm font-bold text-emerald hover:underline" href="{% url 'teacher_courses:create-artifact' course.slug version.id lesson.id %}">Add material</a>{% if lesson.artifacts.all %}<form id="artifact-selection-{{ lesson.id }}" method="post" action="{% url 'teacher_courses:delete-artifacts' course.slug version.id lesson.id %}" onsubmit="return confirm('Remove all selected learning materials from the draft version?');">{% csrf_token %}<button class="inline-flex items-center gap-1 text-xs font-bold text-red-600 hover:text-red-800" type="submit">{% include "components/icon.html" with icon="trash" icon_class="h-4 w-4" %}Remove selected</button></form>{% endif %}</div>
                     </div>
                     {% if lesson.artifacts.all %}
                       <div class="mt-4 space-y-2">
                         {% for artifact in lesson.artifacts.all %}
                           <div class="flex items-start justify-between gap-3 rounded-xl bg-white px-3 py-2 text-sm">
-                            <div><span class="font-bold text-emerald">{{ artifact.get_artifact_type_display }}</span><p class="mt-1 text-slate-600">{{ artifact.content|truncatechars:220 }}</p></div>
+                            <div class="min-w-0 flex-1"><span class="font-bold text-emerald">{{ artifact.get_artifact_type_display }}</span><p class="mt-1 max-w-4xl whitespace-pre-line text-slate-600">{{ artifact.content|truncatechars:800 }}</p></div>
                             <div class="flex shrink-0 items-center gap-3"><a class="inline-flex items-center gap-1 text-xs font-bold text-emerald hover:text-teal-800" href="{% url 'teacher_courses:edit-artifact' course.slug version.id lesson.id artifact.id %}">{% include "components/icon.html" with icon="edit" icon_class="h-4 w-4" %}Edit</a><form method="post" action="{% url 'teacher_courses:delete-artifact' course.slug version.id lesson.id artifact.id %}" onsubmit="return confirm('Remove this material from the draft version?');">{% csrf_token %}<button class="inline-flex items-center gap-1 text-xs font-bold text-red-600 hover:text-red-800" type="submit">{% include "components/icon.html" with icon="trash" icon_class="h-4 w-4" %}Remove</button></form><input class="h-4 w-4 rounded border-slate-300 text-emerald focus:ring-emerald" type="checkbox" name="artifact_ids" value="{{ artifact.id }}" form="artifact-selection-{{ lesson.id }}" aria-label="Select material"></div>
                           </div>
                         {% endfor %}
@@ -133,16 +133,18 @@
                     {% endif %}
                   </div>
 
+                  <div class="flex justify-end"><a class="inline-flex items-center gap-2 rounded-xl border border-emerald/30 px-3 py-2 text-sm font-bold text-emerald hover:bg-emerald/5" href="#lesson-{{ lesson.id }}-assessments">{% include "components/icon.html" with icon="arrow-right" icon_class="h-4 w-4" %}Continue to assessments and rubrics</a></div>
+
                   <div id="lesson-{{ lesson.id }}-assessments" class="scroll-mt-6 rounded-2xl border border-slate-100 bg-cloud/50 p-4">
                     <div class="flex items-center justify-between gap-4">
-                      <div><p class="text-sm font-black uppercase tracking-wider text-emerald">Assessments and rubrics</p><p class="mt-1 text-sm text-slate-500">{{ lesson.questions.all|length }} assessment{{ lesson.questions.all|length|pluralize }}</p></div>
+                      <div><p class="inline-flex items-center gap-2 text-base font-black uppercase tracking-[0.14em] text-emerald">{% include "components/icon.html" with icon="check" icon_class="h-4 w-4" %}Assessments and rubrics</p><p class="mt-1 text-sm text-slate-500">{{ lesson.questions.all|length }} assessment{{ lesson.questions.all|length|pluralize }}</p></div>
                       <div class="flex items-center gap-3"><a class="inline-flex items-center gap-2 rounded-xl bg-emerald px-3 py-2 text-sm font-bold text-white hover:bg-teal-800" href="{% url 'teacher_courses:create-question' course.slug version.id lesson.id %}">{% include "components/icon.html" with icon="plus" icon_class="h-4 w-4" %}Add assessment</a>{% if lesson.questions.all %}<form id="question-selection-{{ lesson.id }}" method="post" action="{% url 'teacher_courses:delete-questions' course.slug version.id lesson.id %}" onsubmit="return confirm('Remove all selected assessments and their rubrics from the draft version?');">{% csrf_token %}<button class="inline-flex items-center gap-1 text-xs font-bold text-red-600 hover:text-red-800" type="submit">{% include "components/icon.html" with icon="trash" icon_class="h-4 w-4" %}Remove selected</button></form>{% endif %}</div>
                     </div>
                     {% if lesson.questions.all %}
                       <div class="mt-4 space-y-2">
                         {% for question in lesson.questions.all %}
                           <div class="flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2">
-                            <div><p class="text-xs font-semibold uppercase tracking-wider text-slate-400">{{ question.get_question_type_display }}</p><p class="mt-1 text-sm text-slate-700">{{ question.prompt|truncatechars:220 }}</p></div>
+                            <div class="min-w-0 flex-1"><p class="text-xs font-normal uppercase tracking-wider text-slate-400">{{ question.get_question_type_display }}</p><p class="mt-1 max-w-4xl whitespace-pre-line text-sm font-normal text-slate-700">{{ question.prompt|truncatechars:800 }}</p></div>
                             <div class="flex shrink-0 items-center gap-3">
                               <a class="inline-flex items-center gap-1 text-xs font-bold text-emerald hover:text-teal-800" href="{% url 'teacher_courses:edit-question' course.slug version.id lesson.id question.id %}">{% include "components/icon.html" with icon="edit" icon_class="h-4 w-4" %}Edit</a>
                               <form method="post" action="{% url 'teacher_courses:delete-question' course.slug version.id lesson.id question.id %}" onsubmit="return confirm('Remove this assessment and its rubric from the draft version?');">{% csrf_token %}<button class="inline-flex items-center gap-1 text-xs font-bold text-red-600 hover:text-red-800" type="submit">{% include "components/icon.html" with icon="trash" icon_class="h-4 w-4" %}Remove</button></form>
@@ -156,7 +158,7 @@
                 </div>
               </div>
             {% empty %}
-              <div class="p-10 text-center"><p class="font-bold text-slate-500">This module has no lessons yet.</p><a class="primary-button mt-4 inline-block" href="{% url 'teacher_courses:create-lesson' course.slug version.id module.id %}">Add the first lesson</a></div>
+              <div class="p-10 text-center"><p class="font-bold text-slate-500">This module has no lessons yet.</p><a class="primary-button mt-4 inline-flex" href="{% url 'teacher_courses:create-lesson' course.slug version.id module.id %}">{% include "components/icon.html" with icon="plus" icon_class="h-4 w-4" %}Add lesson</a></div>
             {% endfor %}
           </div>
         </article>

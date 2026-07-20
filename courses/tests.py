@@ -173,7 +173,7 @@ class CourseAuthoringTests(TestCase):
         self.assertContains(response, "Assessments and rubrics")
         self.assertContains(response, "Finish these items before publishing")
 
-    def test_module_and_lesson_forms_continue_to_next_step(self):
+    def test_module_and_lesson_forms_continue_to_materials_review(self):
         version = CourseVersion.objects.create(course=self.course, version_number=1, status=CourseVersion.Status.DRAFT)
         response = self.client.post(
             reverse("teacher_courses:add-module", kwargs={"slug": self.course.slug, "version_id": version.id}),
@@ -196,18 +196,14 @@ class CourseAuthoringTests(TestCase):
             {
                 "title": "Variables",
                 "position": 1,
-                "objectives_text": "Explain variables",
                 "content": "A variable gives a name to a value in a Python program.",
-                "next": "question",
             },
         )
         lesson = LessonVersion.objects.get(module=module)
-        self.assertRedirects(
-            response,
-            reverse(
-                "teacher_courses:create-question",
-                kwargs={"slug": self.course.slug, "version_id": version.id, "lesson_id": lesson.id},
-            ),
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response.url,
+            f"{reverse('teacher_courses:version-editor', kwargs={'slug': self.course.slug, 'version_id': version.id})}#lesson-{lesson.id}-materials",
         )
 
     def test_teacher_can_edit_module_and_continue_to_first_lesson(self):
@@ -256,8 +252,83 @@ class CourseAuthoringTests(TestCase):
                 },
             )
         )
-        self.assertContains(response, "Save lesson and view course builder")
-        self.assertNotContains(response, "Save and add assessment")
+        self.assertContains(response, "Save and review learning materials")
+        self.assertNotContains(response, "Learning objectives")
+
+    def test_module_editor_can_continue_to_the_next_module(self):
+        version = CourseVersion.objects.create(course=self.course, version_number=1, status=CourseVersion.Status.DRAFT)
+        first_module = Module.objects.create(course_version=version, title="First module", position=1)
+        second_module = Module.objects.create(course_version=version, title="Second module", position=2)
+
+        response = self.client.post(
+            reverse(
+                "teacher_courses:edit-module",
+                kwargs={"slug": self.course.slug, "version_id": version.id, "module_id": first_module.id},
+            ),
+            {"title": "Updated first module", "position": 1, "next": "module"},
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "teacher_courses:edit-module",
+                kwargs={"slug": self.course.slug, "version_id": version.id, "module_id": second_module.id},
+            ),
+        )
+
+    def test_lesson_editor_can_continue_to_the_next_lesson(self):
+        version = CourseVersion.objects.create(course=self.course, version_number=1, status=CourseVersion.Status.DRAFT)
+        module = Module.objects.create(course_version=version, title="Foundations", position=1)
+        first_lesson = LessonVersion.objects.create(module=module, title="First lesson", content="First draft.", position=1)
+        second_lesson = LessonVersion.objects.create(module=module, title="Second lesson", content="Second draft.", position=2)
+
+        response = self.client.post(
+            reverse(
+                "teacher_courses:edit-lesson",
+                kwargs={
+                    "slug": self.course.slug,
+                    "version_id": version.id,
+                    "module_id": module.id,
+                    "lesson_id": first_lesson.id,
+                },
+            ),
+            {"title": "First lesson", "position": 1, "content": "Updated first lesson.", "next": "lesson"},
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "teacher_courses:edit-lesson",
+                kwargs={
+                    "slug": self.course.slug,
+                    "version_id": version.id,
+                    "module_id": module.id,
+                    "lesson_id": second_lesson.id,
+                },
+            ),
+        )
+
+    def test_editor_links_to_module_editing_and_orders_materials_before_assessments(self):
+        version = CourseVersion.objects.create(course=self.course, version_number=1, status=CourseVersion.Status.DRAFT)
+        module = Module.objects.create(course_version=version, title="Foundations", position=1)
+        lesson = LessonVersion.objects.create(module=module, title="Variables", content="Lesson content.", position=1)
+        LessonArtifact.objects.create(lesson_version=lesson, artifact_type="text", content="M" * 500)
+        Question.objects.create(lesson_version=lesson, question_type="scenario", prompt="Q" * 500)
+
+        response = self.client.get(
+            reverse("teacher_courses:version-editor", kwargs={"slug": self.course.slug, "version_id": version.id})
+        )
+
+        self.assertContains(
+            response,
+            reverse(
+                "teacher_courses:edit-module",
+                kwargs={"slug": self.course.slug, "version_id": version.id, "module_id": module.id},
+            ),
+        )
+        self.assertContains(response, "Continue to assessments and rubrics")
+        self.assertContains(response, "M" * 500)
+        self.assertContains(response, "Q" * 500)
 
     def test_teacher_can_edit_course_setup_before_publishing(self):
         response = self.client.post(
@@ -408,9 +479,10 @@ class CourseAuthoringTests(TestCase):
                 "asset": SimpleUploadedFile("welcome.png", b"fake-image", content_type="image/png"),
             },
         )
-        self.assertRedirects(
-            response,
-            reverse("teacher_courses:version-editor", kwargs={"slug": self.course.slug, "version_id": version.id}),
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response.url,
+            f"{reverse('teacher_courses:version-editor', kwargs={'slug': self.course.slug, 'version_id': version.id})}#lesson-{lesson.id}-materials",
         )
         self.assertTrue(LessonArtifact.objects.filter(lesson_version=lesson, artifact_type="image").exists())
         response = self.client.get(
@@ -799,7 +871,6 @@ class CourseGenerationTests(TestCase):
                     "objective": "Learn Python",
                     "duration_weeks": 12,
                     "audience": "Nigerian secondary-school students",
-                    "translation_languages": "yo-NG, ha-NG",
                     "free_prompt": "Use relatable classroom and community examples.",
                 },
             )
@@ -824,7 +895,7 @@ class CourseGenerationTests(TestCase):
         self.assertFalse(
             version.modules.first().lessons.first().questions.first().is_objective
         )
-        self.assertEqual(version.modules.first().lessons.first().translations.count(), 2)
+        self.assertEqual(version.modules.first().lessons.first().translations.count(), 0)
         self.assertTrue(version.final_project.ai_generated)
         self.assertGreater(len(version.final_project.rubric), 0)
         self.assertFalse(CourseVersion.objects.filter(status=CourseVersion.Status.PUBLISHED).exists())
@@ -857,6 +928,11 @@ class CourseGenerationTests(TestCase):
         )
         self.assertContains(status_response, "Course published and approved.")
         self.assertContains(status_response, "Open course studio")
+
+    def test_generation_form_omits_translation_languages(self):
+        response = self.client.get(reverse("teacher_courses:generate"))
+
+        self.assertNotContains(response, "Translation languages")
 
     def test_teacher_can_create_and_edit_a_manual_final_project(self):
         course = Course.objects.create(

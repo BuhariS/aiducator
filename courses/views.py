@@ -295,7 +295,6 @@ def generate_course(request):
                 duration_weeks=form.cleaned_data["duration_weeks"],
                 audience=form.cleaned_data["audience"],
                 free_prompt=form.cleaned_data["free_prompt"],
-                translation_languages=form.cleaned_data["translation_languages"],
             )
             job = AIJob.objects.create(
                 job_type=AIJob.JobType.COURSE_GENERATION,
@@ -522,6 +521,7 @@ def version_editor(request, slug, version_id):
             "course": course,
             "version": version,
             "modules": modules,
+            "first_module": modules[0] if modules else None,
             "final_project": getattr(version, "final_project", None),
             "validation_errors": _version_validation_errors(version, modules),
         },
@@ -561,11 +561,29 @@ def add_module(request, slug, version_id, module_id=None):
                 version_id=version.id,
                 module_id=saved_module.id,
             )
+        if request.POST.get("next") == "module":
+            next_module = version.modules.filter(position__gt=saved_module.position).order_by("position").first()
+            if next_module:
+                return redirect(
+                    "teacher_courses:edit-module",
+                    slug=course.slug,
+                    version_id=version.id,
+                    module_id=next_module.id,
+                )
         return redirect("teacher_courses:version-editor", slug=course.slug, version_id=version.id)
+    next_module = None
+    if module:
+        next_module = version.modules.filter(position__gt=module.position).order_by("position").first()
     return render(
         request,
         "courses/module_form.html",
-        {"course": course, "version": version, "module": module, "form": form},
+        {
+            "course": course,
+            "version": version,
+            "module": module,
+            "form": form,
+            "next_module": next_module,
+        },
     )
 
 
@@ -630,7 +648,7 @@ def artifact_form(request, slug, version_id, lesson_id, artifact_id=None):
             saved_artifact.teacher_approved = True
         saved_artifact.save()
         messages.success(request, "Learning material saved to the draft version.")
-        return redirect("teacher_courses:version-editor", slug=course.slug, version_id=version.id)
+        return _editor_redirect(course, version, f"lesson-{lesson.id}-materials")
     return render(
         request,
         "courses/artifact_form.html",
@@ -717,18 +735,49 @@ def lesson_form(request, slug, version_id, module_id, lesson_id=None):
         saved_lesson.status = LessonVersion.Status.DRAFT
         saved_lesson.save()
         messages.success(request, "Lesson saved to the draft version.")
-        if request.POST.get("next") == "question":
-            return redirect(
-                "teacher_courses:create-question",
-                slug=course.slug,
-                version_id=version.id,
-                lesson_id=saved_lesson.id,
+        if request.POST.get("next") == "lesson":
+            next_lesson = (
+                LessonVersion.objects.filter(module__course_version=version)
+                .select_related("module")
+                .order_by("module__position", "position")
             )
-        return redirect("teacher_courses:version-editor", slug=course.slug, version_id=version.id)
+            lesson_ids = list(next_lesson.values_list("id", flat=True))
+            try:
+                next_lesson_id = lesson_ids[lesson_ids.index(saved_lesson.id) + 1]
+            except (ValueError, IndexError):
+                next_lesson_id = None
+            if next_lesson_id:
+                next_lesson = LessonVersion.objects.select_related("module").get(id=next_lesson_id)
+                return redirect(
+                    "teacher_courses:edit-lesson",
+                    slug=course.slug,
+                    version_id=version.id,
+                    module_id=next_lesson.module_id,
+                    lesson_id=next_lesson.id,
+                )
+        return _editor_redirect(course, version, f"lesson-{saved_lesson.id}-materials")
+    next_lesson = None
+    if lesson:
+        lessons = list(
+            LessonVersion.objects.filter(module__course_version=version)
+            .select_related("module")
+            .order_by("module__position", "position")
+        )
+        for index, candidate in enumerate(lessons):
+            if candidate.id == lesson.id and index + 1 < len(lessons):
+                next_lesson = lessons[index + 1]
+                break
     return render(
         request,
         "courses/lesson_form.html",
-        {"course": course, "version": version, "module": module, "lesson": lesson, "form": form},
+        {
+            "course": course,
+            "version": version,
+            "module": module,
+            "lesson": lesson,
+            "form": form,
+            "next_lesson": next_lesson,
+        },
     )
 
 
@@ -795,7 +844,7 @@ def question_form(request, slug, version_id, lesson_id, question_id=None):
                 },
             )
         messages.success(request, "Question and rubric saved to the draft version.")
-        return redirect("teacher_courses:version-editor", slug=course.slug, version_id=version.id)
+        return _editor_redirect(course, version, f"lesson-{lesson.id}-assessments")
     return render(
         request,
         "courses/question_form.html",
