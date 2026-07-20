@@ -55,7 +55,7 @@ class DashboardPermissionTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "No course analytics yet.")
-        self.assertContains(response, "Analyze metrics")
+        self.assertContains(response, 'aria-label="AInalyse metrics"')
         self.assertContains(response, "View published courses")
         self.assertContains(response, "Review accessibility requests")
         self.assertNotContains(response, "Generate with AI")

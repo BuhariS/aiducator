@@ -88,7 +88,7 @@ class AnalyticsAccessTests(TestCase):
         teacher_response = self.client.get(reverse("analytics:teacher"))
         self.assertEqual(teacher_response.status_code, 200)
         self.assertContains(teacher_response, "How each metric is evaluated")
-        self.assertContains(teacher_response, "Analyze metrics")
+        self.assertContains(teacher_response, 'aria-label="AInalyse metrics"')
 
         self.client.force_login(self.admin)
         response = self.client.get(reverse("analytics:administrator"))
