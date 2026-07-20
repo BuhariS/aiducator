@@ -1,3 +1,5 @@
+import uuid
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import LoginView
@@ -6,7 +8,9 @@ from django.shortcuts import redirect, render
 from django.urls import reverse_lazy
 from django.views.generic import CreateView
 
-from organizations.models import Membership
+from django.utils.text import slugify
+
+from organizations.models import Membership, Organization
 
 from .access import user_has_admin_access, user_is_teacher
 from .forms import EmailAuthenticationForm, SignUpForm
@@ -33,13 +37,24 @@ class SignUpView(CreateView):
             self.object = form.save()
             role = form.cleaned_data["role"]
             membership_role = Membership.Role.TEACHER if role == SignUpForm.Role.TEACHER else Membership.Role.STUDENT
+            organization_name = form.cleaned_data.get("organization_name")
+            if role == SignUpForm.Role.TEACHER:
+                organization = _create_organization(organization_name)
+            else:
+                learner_name = self.object.get_full_name().strip() or self.object.email.split("@", 1)[0]
+                organization = _create_organization(f"{learner_name}'s learning space")
             Membership.objects.create(
-                organization=form.cleaned_data["organization"],
+                organization=organization,
                 user=self.object,
                 role=membership_role,
             )
         messages.success(self.request, "Account created. Sign in to start learning with Aiducator.")
         return redirect(self.get_success_url())
+
+
+def _create_organization(name):
+    slug_root = slugify(name) or "learning-space"
+    return Organization.objects.create(name=name, slug=f"{slug_root}-{uuid.uuid4().hex[:8]}")
 
 
 class TeacherSignUpView(SignUpView):

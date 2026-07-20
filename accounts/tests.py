@@ -3,22 +3,19 @@ from django.test import TestCase
 from django.urls import reverse
 from django.test import override_settings
 
-from organizations.models import Membership, Organization
+from organizations.models import Membership
 
 from .models import User
 
 
 class AuthenticationTests(TestCase):
     def test_user_can_sign_up_and_continue_to_sign_in(self):
-        organization = Organization.objects.create(name="Ada Learning Space", slug="ada-learning-space")
         response = self.client.post(
-            reverse("accounts:signup"),
+            reverse("accounts:signup-student"),
             {
                 "first_name": "Ada",
                 "last_name": "Lovelace",
                 "email": "ada@example.com",
-                "role": "student",
-                "organization": organization.id,
                 "password1": "StrongPass123!",
                 "password2": "StrongPass123!",
             },
@@ -28,17 +25,16 @@ class AuthenticationTests(TestCase):
         self.assertTrue(User.objects.filter(email="ada@example.com").exists())
         user = User.objects.get(email="ada@example.com")
         self.assertTrue(user.memberships.filter(role=Membership.Role.STUDENT).exists())
-        self.assertEqual(user.memberships.get().organization, organization)
+        self.assertEqual(user.memberships.get().organization.name, "Ada Lovelace's learning space")
 
     def test_user_can_sign_up_as_a_teacher(self):
-        organization = Organization.objects.create(name="Lagos Coding School", slug="lagos-coding-school")
         response = self.client.post(
             reverse("accounts:signup-teacher"),
             {
                 "first_name": "Grace",
                 "last_name": "Hopper",
                 "email": "grace@example.com",
-                "organization": organization.id,
+                "organization_name": "Lagos Coding School",
                 "password1": "StrongPass123!",
                 "password2": "StrongPass123!",
             },
@@ -47,19 +43,18 @@ class AuthenticationTests(TestCase):
         user = User.objects.get(email="grace@example.com")
         membership = user.memberships.get()
         self.assertEqual(membership.role, Membership.Role.TEACHER)
-        self.assertEqual(membership.organization, organization)
+        self.assertEqual(membership.organization.name, "Lagos Coding School")
         self.assertEqual(response.url, reverse("accounts:login"))
 
     def test_default_signup_selects_student_and_focuses_first_name(self):
-        organization = Organization.objects.create(name="Learning Space", slug="learning-space")
         response = self.client.get(reverse("accounts:signup"))
 
         self.assertEqual(response.context["form"].fields["role"].initial, "student")
         self.assertEqual(response.context["form"].fields["first_name"].widget.attrs["autofocus"], "autofocus")
         self.assertContains(response, "School or Organization name")
-        self.assertContains(response, organization.name)
+        self.assertContains(response, "Teachers create an organization workspace")
 
-    def test_teacher_signup_requires_an_organization_selection(self):
+    def test_teacher_signup_requires_an_organization_name(self):
         response = self.client.post(
             reverse("accounts:signup-teacher"),
             {

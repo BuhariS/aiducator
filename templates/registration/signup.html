@@ -5,7 +5,7 @@
   <div class="surface-card p-6 sm:p-10">
     <p class="text-sm font-bold uppercase tracking-[0.2em] text-emerald">Join Aiducator</p>
     <h1 class="mt-3 text-3xl font-black text-ink">Create your account</h1>
-    <p class="mt-2 text-slate-500">Choose the learning experience that fits your role.</p>
+    <p class="mt-2 text-slate-500">Teachers create an organization workspace; students receive a personal learning space.</p>
     <div class="mt-6 grid gap-3 sm:grid-cols-2">
       <a class="rounded-2xl border p-4 transition {% if form.role.value == 'student' %}border-emerald bg-emerald/5 hover:bg-emerald/10{% else %}border-slate-200 hover:border-emerald hover:bg-emerald/5{% endif %}" href="{% url 'accounts:signup-student' %}">
         <span class="inline-flex items-center gap-2 text-sm font-black text-emerald">{% include "components/icon.html" with icon="user" icon_class="h-4 w-4" %}Student</span>
