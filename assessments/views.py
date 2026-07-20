@@ -1,3 +1,4 @@
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.conf import settings
@@ -14,7 +15,7 @@ from ai_engine.rate_limit import rate_limit
 from ai_engine.tasks import grade_attempt
 from analytics.security import record_audit_event
 from accounts.access import user_has_teacher_access, user_is_teacher
-from courses.models import Module
+from courses.models import LessonVersion, Module
 from enrollments.models import Enrollment
 from notifications.models import Notification
 from organizations.models import Membership
@@ -89,7 +90,8 @@ def submit_attempt(request, question_id):
                 metadata={"job_id": str(job.id), "attempt_number": attempt.attempt_number},
             )
             transaction.on_commit(lambda: _enqueue_grading(job.id))
-        return redirect("assessments:attempt-status", attempt_id=attempt.id)
+        messages.success(request, "Assessment submitted. Your teacher will review the result when it is ready.")
+        return _redirect_to_next_learning_step(question)
 
     return render(
         request,
@@ -100,6 +102,42 @@ def submit_attempt(request, question_id):
             "attempt_number": attempts_used + 1,
             "allow_copy_paste": allow_copy_paste,
         },
+    )
+
+
+def _redirect_to_next_learning_step(question):
+    """Advance through remaining assessments in a lesson, then the next lesson."""
+    lesson = question.lesson_version
+    lesson_questions = list(
+        Question.objects.filter(lesson_version=lesson, is_active=True).order_by("position", "id")
+    )
+    try:
+        current_index = next(index for index, candidate in enumerate(lesson_questions) if candidate.id == question.id)
+    except StopIteration:
+        current_index = len(lesson_questions)
+    if current_index + 1 < len(lesson_questions):
+        return redirect("assessments:submit", question_id=lesson_questions[current_index + 1].id)
+
+    next_lesson = (
+        LessonVersion.objects.filter(module__course_version=lesson.module.course_version)
+        .filter(
+            Q(module__position__gt=lesson.module.position)
+            | Q(module=lesson.module, position__gt=lesson.position)
+        )
+        .select_related("module")
+        .order_by("module__position", "position", "id")
+        .first()
+    )
+    if next_lesson:
+        return redirect(
+            "courses:learn-lesson",
+            slug=lesson.module.course_version.course.slug,
+            lesson_id=next_lesson.id,
+        )
+    return redirect(
+        "courses:learn-lesson",
+        slug=lesson.module.course_version.course.slug,
+        lesson_id=lesson.id,
     )
 
 

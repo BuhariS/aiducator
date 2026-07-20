@@ -55,6 +55,13 @@ class AttemptFlowTests(TestCase):
             position=1,
         )
         self.question = Question.objects.create(lesson_version=lesson, question_type=Question.QuestionType.EXPLANATION, prompt="Explain a variable.")
+        self.next_question = Question.objects.create(
+            lesson_version=lesson,
+            question_type=Question.QuestionType.REFLECTION,
+            prompt="Reflect on when a variable name is useful.",
+            position=2,
+            is_active=False,
+        )
         RubricVersion.objects.create(
             question=self.question,
             criteria=[{"criterion": "Explains storage of a value", "weight": 100}],
@@ -74,13 +81,31 @@ class AttemptFlowTests(TestCase):
                 {"answer_text": "A variable stores a value in a program."},
             )
         attempt = Attempt.objects.get()
-        self.assertRedirects(response, reverse("assessments:attempt-status", kwargs={"attempt_id": attempt.id}))
+        self.assertRedirects(
+            response,
+            reverse(
+                "courses:learn-lesson",
+                kwargs={"slug": self.enrollment.course.slug, "lesson_id": self.next_lesson.id},
+            ),
+        )
         self.assertEqual(AIJob.objects.filter(entity_id=attempt.id).count(), 1)
         self.assertEqual(attempt.status, Attempt.Status.AWAITING_REVIEW)
         self.assertEqual(ReviewQueueItem.objects.filter(attempt=attempt, status=ReviewQueueItem.Status.OPEN).count(), 1)
         self.assertEqual(len(attempt.submission.content_hash), 64)
         self.assertTrue(GradeEvent.objects.filter(attempt=attempt, event_type=GradeEvent.EventType.SUBMITTED).exists())
         self.assertTrue(ManualReview.objects.filter(attempt=attempt, status=ManualReview.Status.OPEN).exists())
+
+    def test_submission_advances_to_the_next_assessment_in_the_same_lesson(self):
+        Question.objects.filter(pk=self.next_question.pk).update(is_active=True)
+        self.client.force_login(self.student)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(
+                reverse("assessments:submit", kwargs={"question_id": self.question.id}),
+                {"answer_text": "A variable stores a value in a program."},
+            )
+
+        self.assertRedirects(response, reverse("assessments:submit", kwargs={"question_id": self.next_question.id}))
 
     def test_student_sees_tentative_ai_grade_with_moderation_notice(self):
         self.client.force_login(self.student)

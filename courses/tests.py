@@ -6,7 +6,7 @@ from django.urls import reverse
 from accounts.models import User
 from ai_engine.models import AIJob, CourseGenerationRequest
 from analytics.models import AuditEvent
-from assessments.models import Question, RubricVersion
+from assessments.models import Attempt, Question, RubricVersion
 from enrollments.models import CourseCompletion, Enrollment
 from organizations.models import Membership, Organization
 
@@ -33,6 +33,40 @@ class CourseFlowTests(TestCase):
         response = self.client.post(reverse("courses:enroll", kwargs={"slug": self.course.slug}))
         self.assertRedirects(response, reverse("courses:learn", kwargs={"slug": self.course.slug}))
         self.assertEqual(self.course.enrollments.count(), 1)
+
+    def test_course_map_marks_submitted_assessment_complete_while_awaiting_review(self):
+        version = CourseVersion.objects.create(course=self.course, version_number=2, status=CourseVersion.Status.DRAFT)
+        module = Module.objects.create(course_version=version, title="Practice", position=1)
+        lesson = LessonVersion.objects.create(
+            module=module,
+            title="Variable practice",
+            content="Submit your explanation.",
+            position=1,
+            status=LessonVersion.Status.PUBLISHED,
+        )
+        question = Question.objects.create(
+            lesson_version=lesson,
+            question_type=Question.QuestionType.EXPLANATION,
+            prompt="Explain how a variable stores a value.",
+        )
+        version.status = CourseVersion.Status.PUBLISHED
+        version.save(update_fields=["status"])
+        enrollment = Enrollment.objects.create(course=self.course, course_version=version, student=self.student)
+        Attempt.objects.create(
+            enrollment=enrollment,
+            question=question,
+            attempt_number=1,
+            answer_text="A variable gives a value a name.",
+            status=Attempt.Status.AWAITING_REVIEW,
+        )
+        self.client.force_login(self.student)
+
+        response = self.client.get(
+            reverse("courses:learn-lesson", kwargs={"slug": self.course.slug, "lesson_id": lesson.id})
+        )
+
+        self.assertContains(response, "Your answer is awaiting teacher review.")
+        self.assertContains(response, '<span aria-label="Completed">✓</span>')
 
     def test_student_enrolls_in_latest_published_course_version(self):
         latest_version = CourseVersion.objects.create(
@@ -178,6 +212,11 @@ class CourseFlowTests(TestCase):
 
         response = self.client.get(reverse("courses:learn-lesson", kwargs={"slug": self.course.slug, "lesson_id": lesson.id}))
         self.assertContains(response, "Submit your project for AI review")
+        self.assertContains(response, "Final project")
+        self.assertContains(
+            response,
+            f'{reverse("courses:learn-lesson", kwargs={"slug": self.course.slug, "lesson_id": lesson.id})}#final-project',
+        )
         with self.captureOnCommitCallbacks(execute=True):
             response = self.client.post(
                 reverse("courses:submit-final-project", kwargs={"slug": self.course.slug}),

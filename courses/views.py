@@ -146,16 +146,17 @@ def learn(request, slug, lesson_id=None):
         for question in lesson.questions.all():
             question.student_attempt = attempts_by_question.get(question.id)
         active_questions = [question for question in lesson.questions.all() if question.is_active]
-        lesson.assessment_graded = bool(active_questions) and all(
-            getattr(question.student_attempt, "ai_grade", None) for question in active_questions
+        lesson.assessment_submitted = bool(active_questions) and all(
+            getattr(question, "student_attempt", None) for question in active_questions
         )
         lesson.is_completed = bool(
             lesson.student_progress and lesson.student_progress.status == LessonProgress.Status.COMPLETED
-        ) or lesson.assessment_graded
+        ) or lesson.assessment_submitted
     for module in modules:
         module_lessons = list(module.lessons.all())
         module.is_completed = bool(module_lessons) and all(lesson.is_completed for lesson in module_lessons)
     final_project = getattr(version, "final_project", None)
+    final_lesson = lessons[-1] if lessons else None
     project_submission = (
         ProjectSubmission.objects.filter(enrollment=enrollment, final_project=final_project).first()
         if final_project
@@ -178,7 +179,8 @@ def learn(request, slug, lesson_id=None):
             "first_lesson": selected_lesson,
             "selected_lesson": selected_lesson,
             "next_lesson": next_lesson,
-            "is_final_lesson": bool(selected_lesson and lessons and selected_lesson.id == lessons[-1].id),
+            "final_lesson": final_lesson,
+            "is_final_lesson": bool(selected_lesson and final_lesson and selected_lesson.id == final_lesson.id),
             "course_completion": course_completion,
             "progress_by_lesson": progress_by_lesson,
             "attempts_by_question": attempts_by_question,
