@@ -46,10 +46,10 @@ class AuthenticationTests(TestCase):
         self.assertEqual(membership.organization.name, "Lagos Coding School")
         self.assertEqual(response.url, reverse("accounts:login"))
 
-    def test_default_signup_selects_teacher_and_focuses_first_name(self):
+    def test_default_signup_selects_student_and_focuses_first_name(self):
         response = self.client.get(reverse("accounts:signup"))
 
-        self.assertEqual(response.context["form"].fields["role"].initial, "teacher")
+        self.assertEqual(response.context["form"].fields["role"].initial, "student")
         self.assertEqual(response.context["form"].fields["first_name"].widget.attrs["autofocus"], "autofocus")
 
     def test_teacher_signup_requires_an_organization_name(self):

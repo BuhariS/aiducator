@@ -17,7 +17,7 @@ class SignUpForm(UserCreationForm):
 
     role = forms.ChoiceField(
         choices=Role.choices,
-        initial=Role.TEACHER,
+        initial=Role.STUDENT,
         required=False,
         label="I am signing up as a",
     )
@@ -43,7 +43,7 @@ class SignUpForm(UserCreationForm):
     def clean_role(self):
         if self.signup_role:
             return self.signup_role
-        return self.cleaned_data.get("role") or self.Role.TEACHER
+        return self.cleaned_data.get("role") or self.Role.STUDENT
 
     def clean(self):
         cleaned_data = super().clean()

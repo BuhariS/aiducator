@@ -7,12 +7,11 @@
       <p class="text-sm font-bold uppercase tracking-[0.25em] text-sunshine">Course catalog</p>
       <h1 class="mt-4 text-4xl font-black leading-tight text-white sm:text-5xl">Learn the skills that help you build.</h1>
       <p class="mt-5 text-lg leading-8 text-slate-300">Teacher-guided courses designed for focused progress, practical confidence, and meaningful feedback.</p>
-      <form class="mt-8 max-w-xl" method="get" role="search"><label class="sr-only" for="course-search">Search courses</label><div class="flex rounded-2xl bg-white p-2 shadow-lg shadow-black/20"><input id="course-search" class="min-w-0 flex-1 border-0 bg-transparent px-3 text-ink placeholder:text-slate-400 focus:ring-0" type="search" name="q" value="{{ query }}" placeholder="Search by topic, course, or school"><button class="rounded-xl bg-sunshine px-5 py-3 text-sm font-black text-ink transition hover:bg-amber-300" type="submit">Search</button></div></form>
     </div>
   </div>
 </section>
 <section class="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-  <div class="mb-8 flex items-end justify-between"><div><p class="text-sm font-bold uppercase tracking-wider text-emerald">Explore learning</p><h2 class="mt-2 text-2xl font-black text-ink">{% if query %}Results for “{{ query }}”{% else %}Available courses{% endif %}</h2></div>{% if query %}<a class="text-sm font-bold text-emerald hover:underline" href="{% url 'courses:catalog' %}">Clear search</a>{% endif %}</div>
+  <div class="mb-8 flex flex-col gap-5 xl:flex-row xl:items-end"><div class="shrink-0"><p class="text-sm font-bold uppercase tracking-wider text-emerald">Explore learning</p></div><form class="w-full max-w-xl xl:mb-0.5" method="get" role="search"><label class="sr-only" for="course-search">Search courses</label><div class="flex rounded-full border border-slate-200 bg-white p-1.5 shadow-sm transition focus-within:border-emerald focus-within:ring-4 focus-within:ring-emerald/10"><input id="course-search" class="min-w-0 flex-1 rounded-full border-0 bg-transparent px-4 py-2 text-ink placeholder:text-slate-400 focus:ring-0" type="search" name="q" value="{{ query }}" placeholder="Search courses"><button class="rounded-full bg-emerald px-6 py-2.5 text-sm font-black text-white transition hover:bg-emerald-700" type="submit">Search</button></div></form><div class="xl:ml-auto xl:text-right"><h2 class="text-2xl font-black text-ink">{% if query %}Results for “{{ query }}”{% else %}Available courses{% endif %}</h2>{% if query %}<a class="mt-1 inline-block text-sm font-bold text-emerald hover:underline" href="{% url 'courses:catalog' %}">Clear search</a>{% endif %}</div></div>
   {% if courses %}
     <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
       {% for course in courses %}
