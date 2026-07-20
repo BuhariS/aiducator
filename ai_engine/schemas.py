@@ -3,24 +3,20 @@ from typing import Literal
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 
-GENERATED_ARTIFACT_TYPES = Literal[
-    "text",
-    "image",
-    "simulation_link",
-    "code_example",
-]
-
 GENERATED_QUESTION_TYPES = Literal[
-    "explanation",
-    "code_writing",
-    "debugging",
     "reflection",
     "scenario",
     "critical_thinking",
     "task_prompt",
     "misconception",
-    "error_identification",
 ]
+GENERATED_QUESTION_TYPE_VALUES = (
+    "reflection",
+    "scenario",
+    "critical_thinking",
+    "task_prompt",
+    "misconception",
+)
 
 
 def _reject_unsafe_text(value: str) -> str:
@@ -91,25 +87,6 @@ class AnalyticsAnalysisResult(StructuredOutputModel):
     _safe_next_steps = field_validator("next_steps")(_reject_unsafe_payload)
 
 
-class GeneratedArtifactMetadata(StructuredOutputModel):
-    language: str = Field(max_length=32)
-    purpose: str = Field(max_length=240)
-    search_terms: list[str] = Field(max_length=12)
-
-    _safe_language = field_validator("language")(_reject_unsafe_text)
-    _safe_purpose = field_validator("purpose")(_reject_unsafe_text)
-    _safe_search_terms = field_validator("search_terms")(_reject_unsafe_payload)
-
-
-class GeneratedArtifact(StructuredOutputModel):
-    artifact_type: GENERATED_ARTIFACT_TYPES
-    content: str = Field(min_length=1, max_length=12000)
-    metadata: GeneratedArtifactMetadata
-
-    _safe_content = field_validator("content")(_reject_unsafe_text)
-    _safe_metadata = field_validator("metadata")(_reject_unsafe_payload)
-
-
 class GeneratedRubricCriterion(StructuredOutputModel):
     criterion: str = Field(min_length=3, max_length=500)
     weight: float = Field(gt=0, le=100)
@@ -130,9 +107,6 @@ class GeneratedLesson(StructuredOutputModel):
     title: str = Field(min_length=3, max_length=180)
     objectives: list[str] = Field(min_length=1, max_length=8)
     content: str = Field(min_length=30, max_length=20000)
-    # Materials are optional: a strong lesson should not be padded with every
-    # possible type of resource.
-    artifacts: list[GeneratedArtifact] = Field(default_factory=list, max_length=6)
     questions: list[GeneratedQuestion] = Field(min_length=1, max_length=12)
 
     _safe_title = field_validator("title")(_reject_unsafe_text)

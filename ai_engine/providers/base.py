@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol
 
 from ai_engine.schemas import AnalyticsAnalysisResult, CourseGenerationResult, GradingResult
@@ -25,6 +25,7 @@ class CourseGenerationInput:
     duration_weeks: int
     audience: str
     free_prompt: str
+    assessment_types: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

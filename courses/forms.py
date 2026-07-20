@@ -4,6 +4,7 @@ from django import forms
 from django.utils.text import slugify
 
 from ai_engine.security import allowed_embed_url, clean_input, reject_prompt_injection
+from assessments.models import Question
 
 from .models import Course, FinalProject, LessonArtifact, LessonFeedback, LessonVersion, Module, ProjectSubmission
 
@@ -58,6 +59,12 @@ class CourseGenerationForm(forms.Form):
         max_length=180,
         required=False,
         widget=forms.TextInput(attrs={"placeholder": "e.g. Secondary-school learners"}),
+    )
+    assessment_types = forms.MultipleChoiceField(
+        label="Assessment types",
+        choices=Question.QuestionType.choices,
+        help_text="Select one or more assessment types for AI to generate.",
+        widget=forms.SelectMultiple(attrs={"size": 5}),
     )
     free_prompt = forms.CharField(
         required=False,

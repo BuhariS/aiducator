@@ -27,6 +27,8 @@ class OpenAIProviderTests(TestCase):
 
         self.assertTrue(object_schemas)
         self.assertTrue(all(item.get("additionalProperties") is False for item in object_schemas))
+        lesson_schema = schema["$defs"]["GeneratedLesson"]["properties"]
+        self.assertNotIn("artifacts", lesson_schema)
 
     @override_settings(OPENAI_API_KEY="test-key", OPENAI_BASE_URL="")
     @patch("ai_engine.providers.openai.OpenAI")
@@ -46,10 +48,13 @@ class OpenAIProviderTests(TestCase):
                 duration_weeks=6,
                 audience="Secondary-school learners",
                 free_prompt="Use locally relevant examples.",
+                assessment_types=["scenario", "reflection"],
             )
         )
 
         self.assertNotIn("translation", prompt.lower())
+        self.assertIn("scenario, reflection", prompt)
+        self.assertIn("Do not create, mention, or return learning materials", prompt)
 
     @override_settings(OPENAI_API_KEY="test-key", OPENAI_MODEL="gpt-5.6")
     @patch("ai_engine.providers.openai.OpenAI")

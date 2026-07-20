@@ -1,7 +1,12 @@
 from django.conf import settings
 from openai import OpenAI
 
-from ai_engine.schemas import AnalyticsAnalysisResult, CourseGenerationResult, GradingResult
+from ai_engine.schemas import (
+    AnalyticsAnalysisResult,
+    CourseGenerationResult,
+    GENERATED_QUESTION_TYPE_VALUES,
+    GradingResult,
+)
 from ai_engine.security import redact_provider_text
 
 from .base import (
@@ -170,18 +175,17 @@ class OpenAICourseGenerationProvider:
 
     @staticmethod
     def _build_prompt(request: CourseGenerationInput) -> str:
+        assessment_types = request.assessment_types or list(GENERATED_QUESTION_TYPE_VALUES)
         return (
             "Create a teacher-reviewable draft course. Include lesson explanations, learning objectives, "
-            "and assessment questions with rubrics. Add learning materials only when they meaningfully help "
-            "that particular lesson; do not pad every lesson with every material type. Never create image prompts "
-            "or video artifacts. Teachers can add video URLs manually during their review. "
-            "Use the supported question types: scenario, "
-            "critical_thinking, task_prompt, misconception, error_identification, explanation, "
-            "code_writing, debugging, and reflection. Also create one practical final project with "
+            "and assessment questions with rubrics. Do not create, mention, or return learning materials, "
+            "links, videos, images, code examples, simulations, or artifacts; teachers add those manually. "
+            "Use only the assessment question types selected by the teacher. Also create one practical final project with "
             "objectives, requirements, deliverables, estimated hours, and an assessed rubric.\n\n"
             f"Course title: {redact_provider_text(request.title, max_length=180)}\n"
             f"Learning objective: <objective>\n{redact_provider_text(request.objective, max_length=2_000)}\n</objective>\n"
             f"Duration in weeks: {request.duration_weeks}\n"
             f"Audience: {redact_provider_text(request.audience, max_length=180)}\n"
+            f"Selected assessment question types: {', '.join(assessment_types)}\n"
             f"Additional teacher prompt:\n<teacher_prompt>\n{redact_provider_text(request.free_prompt, max_length=4_000)}\n</teacher_prompt>"
         )

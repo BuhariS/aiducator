@@ -7,21 +7,21 @@ from assessments.models import Question, RubricVersion
 from courses.models import (
     CourseVersion,
     FinalProject,
-    LessonArtifact,
     LessonVersion,
     Module,
 )
 
 from .models import CourseGenerationRequest
-from .schemas import CourseGenerationResult
-from .security import allowed_embed_url, moderate_payload, sanitize_html
+from .schemas import CourseGenerationResult, GENERATED_QUESTION_TYPE_VALUES
+from .security import moderate_payload, sanitize_html
 
 
-def validate_generation_result(result) -> CourseGenerationResult:
+def validate_generation_result(result, *, allowed_question_types=None) -> CourseGenerationResult:
     """Revalidate provider output before any generated content is persisted."""
     payload = result.model_dump() if hasattr(result, "model_dump") else result
     moderate_payload(payload, field_name="Generated course content")
     validated = CourseGenerationResult.model_validate(payload)
+    allowed_question_types = set(allowed_question_types or GENERATED_QUESTION_TYPE_VALUES)
     for module in validated.modules:
         for lesson in module.lessons:
             lesson.content = sanitize_html(lesson.content)
@@ -29,17 +29,14 @@ def validate_generation_result(result) -> CourseGenerationResult:
                 raise ValidationError(f"Generated lesson '{lesson.title}' is too short to be useful.")
             if sum(criterion.weight for question in lesson.questions for criterion in question.rubric) <= 0:
                 raise ValidationError(f"Generated lesson '{lesson.title}' has invalid rubric weights.")
-            for artifact in lesson.artifacts:
-                if artifact.artifact_type != "code_example":
-                    artifact.content = sanitize_html(artifact.content)
-                if artifact.artifact_type in {"image", "simulation_link"}:
-                    allowed_embed_url(artifact.content, field_name="Generated media URL")
+            if any(question.question_type not in allowed_question_types for question in lesson.questions):
+                raise ValidationError(f"Generated lesson '{lesson.title}' contains an assessment type that was not selected.")
     return validated
 
 
 @transaction.atomic
 def persist_generation_result(request: CourseGenerationRequest, result: CourseGenerationResult):
-    result = validate_generation_result(result)
+    result = validate_generation_result(result, allowed_question_types=request.assessment_types)
     course = request.course
     course.description = result.description
     course.status = course.Status.DRAFT
@@ -72,16 +69,6 @@ def persist_generation_result(request: CourseGenerationRequest, result: CourseGe
                 position=lesson_position,
                 status=LessonVersion.Status.DRAFT,
             )
-            for artifact_position, generated_artifact in enumerate(generated_lesson.artifacts, start=1):
-                LessonArtifact.objects.create(
-                    lesson_version=lesson,
-                    artifact_type=generated_artifact.artifact_type,
-                    content=generated_artifact.content,
-                    metadata=generated_artifact.metadata.model_dump(),
-                    ai_generated=True,
-                    teacher_approved=False,
-                    position=artifact_position,
-                )
             for question_position, generated_question in enumerate(generated_lesson.questions, start=1):
                 question = Question.objects.create(
                     lesson_version=lesson,

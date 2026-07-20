@@ -68,6 +68,7 @@ class CourseGenerationRequest(models.Model):
     objective = models.TextField(blank=True)
     duration_weeks = models.PositiveSmallIntegerField(default=12)
     audience = models.CharField(max_length=180, blank=True)
+    assessment_types = models.JSONField(default=list, blank=True)
     free_prompt = models.TextField(blank=True)
     translation_languages = models.JSONField(default=list, blank=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.QUEUED)

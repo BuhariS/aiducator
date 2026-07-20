@@ -180,7 +180,7 @@ class Command(BaseCommand):
                     lesson_version=lesson,
                     position=1,
                     defaults={
-                        "question_type": Question.QuestionType.EXPLANATION,
+                        "question_type": Question.QuestionType.SCENARIO,
                         "prompt": prompt,
                         "max_score": 100,
                         "is_active": True,

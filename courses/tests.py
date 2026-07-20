@@ -40,7 +40,7 @@ class CourseFlowTests(TestCase):
         lesson = LessonVersion.objects.create(module=module, title="Final check", content="Show what you learned.", position=1)
         question = Question.objects.create(
             lesson_version=lesson,
-            question_type=Question.QuestionType.EXPLANATION,
+            question_type=Question.QuestionType.SCENARIO,
             prompt="Explain the main concept.",
         )
         version.status = CourseVersion.Status.PUBLISHED
@@ -91,7 +91,7 @@ class CourseFlowTests(TestCase):
         )
         question = Question.objects.create(
             lesson_version=lesson,
-            question_type=Question.QuestionType.EXPLANATION,
+            question_type=Question.QuestionType.SCENARIO,
             prompt="Explain how a variable stores a value.",
         )
         version.status = CourseVersion.Status.PUBLISHED
@@ -228,6 +228,33 @@ class CourseFlowTests(TestCase):
 
         self.assertContains(response, "<h2>A useful heading</h2>", html=True)
         self.assertContains(response, "https://www.youtube-nocookie.com/embed/rfscVS0vtbw")
+
+    def test_manual_video_url_renders_in_an_embed_frame(self):
+        version = CourseVersion.objects.create(course=self.course, version_number=2, status=CourseVersion.Status.DRAFT)
+        module = Module.objects.create(course_version=version, title="Interactive learning", position=1)
+        lesson = LessonVersion.objects.create(
+            module=module,
+            title="Explore the concept",
+            objectives=["Explore the concept visually"],
+            content="Use the embedded resource to explore the concept.",
+            position=1,
+            status=LessonVersion.Status.PUBLISHED,
+        )
+        LessonArtifact.objects.create(
+            lesson_version=lesson,
+            artifact_type=LessonArtifact.ArtifactType.VIDEO,
+            content="https://phet.colorado.edu/sims/html/ohms-law/latest/ohms-law_en.html",
+            position=1,
+        )
+        version.status = CourseVersion.Status.PUBLISHED
+        version.save(update_fields=["status"])
+        Enrollment.objects.create(course=self.course, course_version=version, student=self.student)
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse("courses:learn-lesson", kwargs={"slug": self.course.slug, "lesson_id": lesson.id}))
+
+        self.assertContains(response, "https://phet.colorado.edu/sims/html/ohms-law/latest/ohms-law_en.html")
+        self.assertContains(response, '<iframe class="h-full w-full"')
 
     @override_settings(CELERY_TASK_ALWAYS_EAGER=True, AI_LLM_PROVIDER="fake")
     def test_student_can_submit_final_project_and_receive_review_notification(self):
@@ -598,7 +625,7 @@ class CourseAuthoringTests(TestCase):
                 kwargs={"slug": self.course.slug, "version_id": version.id, "lesson_id": lesson.id},
             ),
             {
-                "question_type": "explanation",
+                "question_type": "scenario",
                 "prompt": "Explain what a variable is.",
                 "max_score": 100,
                 "position": 1,
@@ -675,7 +702,7 @@ class CourseAuthoringTests(TestCase):
         )
         question = Question.objects.create(
             lesson_version=lesson,
-            question_type=Question.QuestionType.EXPLANATION,
+            question_type=Question.QuestionType.SCENARIO,
             prompt="Explain the welcome lesson.",
         )
         rubric = RubricVersion.objects.create(
@@ -880,7 +907,7 @@ class CourseAuthoringTests(TestCase):
         )
         first_question = Question.objects.create(
             lesson_version=lesson,
-            question_type=Question.QuestionType.EXPLANATION,
+            question_type=Question.QuestionType.SCENARIO,
             prompt="Explain the lesson.",
         )
         second_question = Question.objects.create(
@@ -950,7 +977,7 @@ class CourseAuthoringTests(TestCase):
         )
         question = Question.objects.create(
             lesson_version=lesson,
-            question_type=Question.QuestionType.EXPLANATION,
+            question_type=Question.QuestionType.SCENARIO,
             prompt="Explain the welcome lesson.",
         )
         version.status = CourseVersion.Status.PUBLISHED
@@ -1050,6 +1077,7 @@ class CourseGenerationTests(TestCase):
                     "objective": "Learn Python",
                     "duration_weeks": 12,
                     "audience": "Nigerian secondary-school students",
+                    "assessment_types": ["scenario", "reflection"],
                     "free_prompt": "Use relatable classroom and community examples.",
                 },
             )
@@ -1075,11 +1103,16 @@ class CourseGenerationTests(TestCase):
             version.modules.first().lessons.first().questions.first().is_objective
         )
         self.assertEqual(version.modules.first().lessons.first().translations.count(), 0)
+        self.assertEqual(generation_request.assessment_types, ["scenario", "reflection"])
+        self.assertFalse(version.modules.first().lessons.first().artifacts.exists())
+        self.assertEqual(
+            set(version.modules.first().lessons.first().questions.values_list("question_type", flat=True)),
+            {"scenario", "reflection"},
+        )
         self.assertTrue(version.final_project.ai_generated)
         self.assertGreater(len(version.final_project.rubric), 0)
         self.assertFalse(CourseVersion.objects.filter(status=CourseVersion.Status.PUBLISHED).exists())
         self.assertTrue(AuditEvent.objects.filter(action="ai_course_generation_requested").exists())
-        self.assertTrue(version.modules.first().lessons.first().artifacts.filter(ai_generated=True, teacher_approved=False).exists())
 
         publish_response = self.client.post(
             reverse(
@@ -1093,12 +1126,6 @@ class CourseGenerationTests(TestCase):
         )
         version.refresh_from_db()
         self.assertEqual(version.status, CourseVersion.Status.PUBLISHED)
-        self.assertTrue(
-            version.modules.first().lessons.first().artifacts.filter(
-                ai_generated=True,
-                teacher_approved=True,
-            ).exists()
-        )
         version.final_project.refresh_from_db()
         self.assertTrue(version.final_project.teacher_approved)
 
@@ -1112,6 +1139,16 @@ class CourseGenerationTests(TestCase):
         response = self.client.get(reverse("teacher_courses:generate"))
 
         self.assertNotContains(response, "Translation languages")
+
+    def test_generation_form_offers_only_supported_multiple_assessment_types(self):
+        response = self.client.get(reverse("teacher_courses:generate"))
+
+        self.assertContains(response, 'name="assessment_types"')
+        self.assertContains(response, "Scenario-based")
+        self.assertNotContains(response, ">Explanation<")
+        self.assertNotContains(response, "Code writing")
+        self.assertNotContains(response, "Debugging")
+        self.assertNotContains(response, "Identify the mistakes")
 
     def test_teacher_can_create_and_edit_a_manual_final_project(self):
         course = Course.objects.create(

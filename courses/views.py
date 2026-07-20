@@ -434,6 +434,7 @@ def generate_course(request):
                 objective=form.cleaned_data["objective"],
                 duration_weeks=form.cleaned_data["duration_weeks"],
                 audience=form.cleaned_data["audience"],
+                assessment_types=form.cleaned_data["assessment_types"],
                 free_prompt=form.cleaned_data["free_prompt"],
             )
             job = AIJob.objects.create(

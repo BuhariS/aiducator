@@ -55,7 +55,7 @@ class AttemptFlowTests(TestCase):
             content="Learn conditions.",
             position=1,
         )
-        self.question = Question.objects.create(lesson_version=lesson, question_type=Question.QuestionType.EXPLANATION, prompt="Explain a variable.")
+        self.question = Question.objects.create(lesson_version=lesson, question_type=Question.QuestionType.SCENARIO, prompt="Explain a variable.")
         self.next_question = Question.objects.create(
             lesson_version=lesson,
             question_type=Question.QuestionType.REFLECTION,

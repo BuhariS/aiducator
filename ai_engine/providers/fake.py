@@ -84,6 +84,36 @@ class FakeAnalyticsAnalyzer:
 class FakeCourseGenerationProvider:
     def generate(self, request: CourseGenerationInput) -> ProviderCourseGeneration:
         module_count = max(1, min(4, round(request.duration_weeks / 4)))
+        question_templates = {
+            "scenario": {
+                "question_type": "scenario",
+                "prompt": "A school club needs to store the number of learners present. Explain how you would model this in Python.",
+                "rubric": [{"criterion": "Chooses an appropriate Python value", "weight": 50}, {"criterion": "Explains the choice clearly", "weight": 50}],
+            },
+            "critical_thinking": {
+                "question_type": "critical_thinking",
+                "prompt": "Compare two ways of solving this lesson problem and explain which is easier to maintain.",
+                "rubric": [{"criterion": "Compares two approaches accurately", "weight": 50}, {"criterion": "Justifies a recommendation", "weight": 50}],
+            },
+            "task_prompt": {
+                "question_type": "task_prompt",
+                "prompt": "Write a prompt that would ask a coding assistant to create a small program using this lesson concept.",
+                "rubric": [{"criterion": "Includes a clear task", "weight": 50}, {"criterion": "Includes useful constraints", "weight": 50}],
+            },
+            "misconception": {
+                "question_type": "misconception",
+                "prompt": "A learner says that every value in Python must be stored in a variable. Explain the misconception.",
+                "rubric": [{"criterion": "Identifies the misconception", "weight": 50}, {"criterion": "Corrects it with an example", "weight": 50}],
+            },
+            "reflection": {
+                "question_type": "reflection",
+                "prompt": "Reflect on how you would apply this lesson concept in a small program of your own.",
+                "rubric": [{"criterion": "Connects the concept to a realistic use", "weight": 50}, {"criterion": "Explains the reflection clearly", "weight": 50}],
+            },
+        }
+        selected_question_types = [
+            question_type for question_type in request.assessment_types if question_type in question_templates
+        ] or list(question_templates)
         modules = []
         for module_number in range(1, module_count + 1):
             lesson_title = f"{request.title}: foundation {module_number}"
@@ -101,44 +131,7 @@ class FakeCourseGenerationProvider:
                                 f"This lesson introduces {lesson_title.lower()} for {request.audience or 'secondary-school learners'}. "
                                 "Learners should connect the concept to a small Python example and explain why the example works."
                             ),
-                            "artifacts": [
-                                {
-                                    "artifact_type": "code_example",
-                                    "content": "value = 3\nprint(value)",
-                                    "metadata": {
-                                        "language": "python",
-                                        "purpose": "Show a short runnable example.",
-                                        "search_terms": [],
-                                    },
-                                },
-                            ],
-                            "questions": [
-                                {
-                                    "question_type": "scenario",
-                                    "prompt": "A school club needs to store the number of learners present. Explain how you would model this in Python.",
-                                    "rubric": [{"criterion": "Chooses an appropriate Python value", "weight": 50}, {"criterion": "Explains the choice clearly", "weight": 50}],
-                                },
-                                {
-                                    "question_type": "critical_thinking",
-                                    "prompt": "Compare two ways of solving this lesson problem and explain which is easier to maintain.",
-                                    "rubric": [{"criterion": "Compares two approaches accurately", "weight": 50}, {"criterion": "Justifies a recommendation", "weight": 50}],
-                                },
-                                {
-                                    "question_type": "task_prompt",
-                                    "prompt": "Write a prompt that would ask a coding assistant to create a small program using this lesson concept.",
-                                    "rubric": [{"criterion": "Includes a clear task", "weight": 50}, {"criterion": "Includes useful constraints", "weight": 50}],
-                                },
-                                {
-                                    "question_type": "misconception",
-                                    "prompt": "A learner says that every value in Python must be stored in a variable. Explain the misconception.",
-                                    "rubric": [{"criterion": "Identifies the misconception", "weight": 50}, {"criterion": "Corrects it with an example", "weight": 50}],
-                                },
-                                {
-                                    "question_type": "error_identification",
-                                    "prompt": "Find and explain the mistake in this code: print(total) before total has been assigned.",
-                                    "rubric": [{"criterion": "Identifies the error", "weight": 50}, {"criterion": "Suggests a correction", "weight": 50}],
-                                },
-                            ],
+                            "questions": [question_templates[question_type] for question_type in selected_question_types],
                         }
                     ],
                 }
