@@ -22,6 +22,7 @@ from accounts.access import (
 from ai_engine.models import AIJob, CourseGenerationRequest
 from ai_engine.rate_limit import rate_limit
 from analytics.security import record_audit_event
+from analytics.services import teacher_analytics
 from assessments.forms import QuestionForm, RubricForm
 from assessments.models import Appeal, Attempt, GradeDecision, Question, ReviewQueueItem, RubricVersion
 from enrollments.models import CourseCompletion, Enrollment, LessonProgress
@@ -370,8 +371,21 @@ def teacher_dashboard(request):
     return render(
         request,
         "courses/teacher_dashboard.html",
-        {"courses": courses, "review_count": review_count, "appeal_count": appeal_count},
+        {
+            "courses": courses,
+            "review_count": review_count,
+            "appeal_count": appeal_count,
+            "course_metrics": teacher_analytics(request.user),
+        },
     )
+
+
+@login_required
+def teacher_course_studio(request):
+    if not user_is_teacher(request.user):
+        return HttpResponseForbidden("You do not have access to the course studio.")
+    courses = Course.objects.filter(created_by=request.user).select_related("organization").order_by("-updated_at")
+    return render(request, "courses/course_studio.html", {"courses": courses})
 
 
 @login_required

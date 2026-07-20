@@ -346,6 +346,15 @@ class CourseAuthoringTests(TestCase):
             reverse("teacher_courses:version-editor", kwargs={"slug": course.slug, "version_id": draft.id}),
         )
 
+    def test_teacher_can_open_the_course_studio_workspace(self):
+        response = self.client.get(reverse("teacher_courses:dashboard"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Course Studio")
+        self.assertContains(response, "Generate with AI")
+        self.assertContains(response, "Create a course manually")
+        self.assertContains(response, self.course.title)
+
     def test_course_builder_shows_guided_steps(self):
         version = CourseVersion.objects.create(course=self.course, version_number=1, status=CourseVersion.Status.DRAFT)
         response = self.client.get(

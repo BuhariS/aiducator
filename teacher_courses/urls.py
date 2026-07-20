@@ -21,12 +21,14 @@ from courses.views import (
     publish_version,
     question_form,
     preview_version,
+    teacher_course_studio,
     version_editor,
 )
 
 app_name = "teacher_courses"
 
 urlpatterns = [
+    path("studio/", teacher_course_studio, name="dashboard"),
     path("new/", create_course, name="create"),
     path("generate/", generate_course, name="generate"),
     path("generate/<uuid:request_id>/status/", generation_status, name="generation-status"),

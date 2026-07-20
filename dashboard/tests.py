@@ -47,3 +47,32 @@ class DashboardPermissionTests(TestCase):
         self.client.force_login(self.admin)
         response = self.client.get(reverse("accounts:dashboard"))
         self.assertRedirects(response, reverse("dashboard:administrator-dashboard"))
+
+    def test_teacher_dashboard_embeds_course_analytics_and_action_links(self):
+        self.client.force_login(self.teacher)
+
+        response = self.client.get(reverse("dashboard:teacher-dashboard"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "No course analytics yet.")
+        self.assertContains(response, "Analyze metrics")
+        self.assertContains(response, "View published courses")
+        self.assertContains(response, "Review accessibility requests")
+        self.assertNotContains(response, "Generate with AI")
+        self.assertNotContains(response, "View analytics")
+
+    def test_teacher_navigation_links_to_course_studio(self):
+        self.client.force_login(self.teacher)
+
+        response = self.client.get(reverse("dashboard:teacher-dashboard"))
+
+        self.assertContains(response, "Course Studio")
+        self.assertContains(response, reverse("teacher_courses:dashboard"))
+
+    def test_student_navigation_keeps_courses_link(self):
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse("dashboard:student-dashboard"))
+
+        self.assertContains(response, f'href="{reverse("courses:catalog")}"')
+        self.assertNotContains(response, "Course Studio")
