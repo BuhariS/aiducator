@@ -42,69 +42,331 @@ To build upon Aiducator's foundational LMS capabilities, future development will
 
 ## Local setup
 
-Install Python dependencies with `uv`:
+# 🚀 Run Aiducator Locally
+
+This guide walks you through setting up **Aiducator** from scratch for both **development** and **AI-powered course generation**.
+
+---
+
+## 📋 Prerequisites
+
+Before you begin, ensure you have the following installed:
+
+* Python **3.12+**
+* [uv](https://docs.astral.sh/uv/)
+* Node.js **18+**
+* npm
+* Docker *(optional, for Redis/Celery background processing)*
+* An OpenAI API key *(required for AI course generation)*
+
+---
+
+# ⚡ Quick Start
 
 ```bash
+git clone <repo-url>
+cd aiducator
+
 uv sync
+
+npm install
+npm run build
+
+cp .env.example .env
+
 uv run python manage.py migrate
+
 uv run python manage.py runserver
 ```
 
-The default local database is SQLite. For PostgreSQL, start the bundled service with `docker compose up -d postgres` and set `DATABASE_URL=postgresql://aiducator:aiducator@localhost:5432/aiducator` in `.env`. Redis is available with `docker compose up -d redis`.
+Open:
 
-Create accounts at `/accounts/signup/`, or use the role-specific entry points `/accounts/signup/student/` and `/accounts/signup/teacher/`. Teacher signup requires a school or organization name and creates that organization plus a teacher membership. Student signup creates a personal learning organization plus a student membership. Students and teachers are associated through these organization memberships.
-
-Seed the first Python course and demo accounts:
-
-```bash
-uv run python manage.py seed_python_course
+```
+http://127.0.0.1:8000
 ```
 
-New demo accounts use `Aiducator123!` unless `AIDUCATOR_SEED_PASSWORD` is set before running the command. The command is safe to run repeatedly.
+---
 
-## Local database reset and demo data
+# 📦 Installation
 
-For the default local SQLite database only, stop the development server, move the existing database to a timestamped backup, then migrate and seed fresh demo data:
+## 1. Clone the Repository
 
 ```bash
-mv db.sqlite3 "db.sqlite3.backup.$(date +%Y%m%d%H%M%S)"
-uv run python manage.py migrate
-uv run python manage.py seed_python_course
+git clone <repo-url>
+cd aiducator
 ```
 
-Do not run these commands against a shared or production database. For PostgreSQL, use an environment-specific backup and reset procedure instead.
+---
 
-## Course publishing and archive lifecycle
+## 2. Install Backend Dependencies
 
-Draft courses can be deleted when no learner is enrolled. Published courses and their published versions are immutable, so a published course must be archived rather than deleted. Archiving removes the course from the catalog and prevents new enrollment while retaining its teaching history. An archived course can be deleted only when it has no enrollments.
+```bash
+uv sync
+```
 
-Install the frontend dependency and build Tailwind CSS:
+---
+
+## 3. Install Frontend Dependencies
 
 ```bash
 npm install
 npm run build
 ```
 
-Use `npm run dev` during UI development. The implementation plan, schema, user journeys, screen inventory, and acceptance criteria are in `docs/phase-1-specification.md`. Phase 3 workflow details are in `docs/phase-3-implementation.md`.
+---
 
-Teacher course-generation details are in `docs/phase-4-course-generation.md`.
+## 4. Configure Environment Variables
 
-Content safety and production security controls are documented in `docs/content-safety.md`.
-
-Gamification event rules and teacher/administrator analytics are documented in `docs/gamification-analytics.md`.
-
-## AI grading worker
-
-Copy `.env.example` to `.env`. The default `fake` provider is safe for local development. The only supported `AI_LLM_PROVIDER` values are `fake` and `openai`. To use OpenAI, set `AI_LLM_PROVIDER=openai` and provide a non-empty `OPENAI_API_KEY` in `.env`; the app fails at startup if this configuration is missing or unsupported. Keep the key server-side and never expose it to templates or JavaScript.
-
-In local debug mode, generation runs eagerly by default, so Redis and a worker are optional. To run the production-style asynchronous workflow, set `CELERY_TASK_ALWAYS_EAGER=0`, then start Redis and the Django worker in separate terminals:
+Create your environment file:
 
 ```bash
-docker compose up -d redis
-uv run celery -A config worker --loglevel=INFO
+cp .env.example .env
+```
+
+Edit `.env`:
+
+```env
+DJANGO_DEBUG=1
+
+AI_LLM_PROVIDER=openai
+OPENAI_API_KEY=sk-your-real-key
+OPENAI_MODEL=gpt-5.6
+
+# Run Celery tasks synchronously (recommended for local development)
+CELERY_TASK_ALWAYS_EAGER=1
+```
+
+### Notes
+
+* SQLite is the default database for local development.
+* Never commit your `.env` file or expose your API key.
+* If you need a new API key, generate one from the OpenAI dashboard.
+
+---
+
+## 5. Run Database Migrations
+
+```bash
+uv run python manage.py migrate
+```
+
+---
+
+## 6. (Optional) Load Demo Course
+
+If you'd like sample content to explore the application quickly:
+
+```bash
+uv run python manage.py seed_python_course
+```
+
+> Skip this step if you want to create courses entirely with AI.
+
+---
+
+## 7. Start the Development Server
+
+```bash
 uv run python manage.py runserver
 ```
 
-For production, set `STORAGE_BACKEND=s3` and provide the AWS-compatible bucket and endpoint variables from `.env.example`. Session and CSRF cookies become secure when `DJANGO_DEBUG=0`; configure SMTP variables to enable password-recovery email delivery.
+Visit:
 
-Student submissions create a queued `AIJob`. The worker evaluates the answer with structured output, creates a teacher review item, and records provider usage. Teachers review submissions at `/assessments/reviews/`; confirmed grades update progress, notifications, and XP.
+```
+http://127.0.0.1:8000
+```
+
+---
+
+# 👩‍🏫 Teacher Workflow
+
+Create a teacher account:
+
+```
+http://127.0.0.1:8000/accounts/signup/teacher/
+```
+
+After signing in:
+
+1. Open **Course Studio**
+2. Select **Generate with AI**
+3. Fill in the course information
+4. Submit generation
+5. Review the generated content
+6. Validate and publish the course
+
+With
+
+```env
+CELERY_TASK_ALWAYS_EAGER=1
+```
+
+AI generation runs immediately in the request without requiring Redis or Celery.
+
+---
+
+# 👨‍🎓 Student Workflow
+
+Create a student account:
+
+```
+http://127.0.0.1:8000/accounts/signup/student/
+```
+
+Then:
+
+* Browse available courses
+* Enroll in a published course
+* Complete lessons
+* Take assessments
+* Receive AI feedback
+* Track learning progress
+
+---
+
+# ⚙️ Running Background Workers (Optional)
+
+For a production-like experience with asynchronous AI generation and grading:
+
+Start Redis:
+
+```bash
+docker compose up -d redis
+```
+
+Disable eager execution:
+
+```env
+CELERY_TASK_ALWAYS_EAGER=0
+```
+
+Start a Celery worker:
+
+```bash
+uv run celery -A config worker --loglevel=INFO
+```
+
+Keep the Django server running in a separate terminal.
+
+---
+
+# 👑 Django Admin (Optional)
+
+Create an administrator account:
+
+```bash
+uv run python manage.py createsuperuser
+```
+
+Access the admin panel:
+
+```
+http://127.0.0.1:8000/admin/
+```
+
+---
+
+# 🩺 Verify Installation
+
+Run Django's system checks:
+
+```bash
+uv run python manage.py check
+```
+
+---
+
+# 🔧 Troubleshooting
+
+### OpenAI API key must be set
+
+Your `.env` file is missing:
+
+```env
+OPENAI_API_KEY=...
+```
+
+Restart the Django server after updating `.env`.
+
+---
+
+### 401 Unauthorized
+
+Your API key is invalid, revoked, or incorrectly copied.
+
+---
+
+### Quota or Billing Error
+
+Your OpenAI project does not currently have available API usage or billing configured.
+
+---
+
+### AI Generation Doesn't Run
+
+If using background workers, ensure:
+
+* Redis is running
+* Celery worker is running
+* `CELERY_TASK_ALWAYS_EAGER=0`
+
+For local development, simply use:
+
+```env
+CELERY_TASK_ALWAYS_EAGER=1
+```
+
+---
+
+# 🔄 Reset Local Database
+
+## Keep a Backup
+
+```bash
+mv db.sqlite3 db.sqlite3.backup.$(date +%Y%m%d%H%M%S)
+```
+
+Recreate the database:
+
+```bash
+uv run python manage.py migrate
+```
+
+(Optional)
+
+```bash
+uv run python manage.py seed_python_course
+```
+
+---
+
+# 📁 Project Structure
+
+```text
+aiducator/
+├── config/
+├── apps/
+├── frontend/
+├── templates/
+├── static/
+├── media/
+├── manage.py
+├── package.json
+├── pyproject.toml
+├── docker-compose.yml
+└── .env.example
+```
+
+
+
+## 🎉 You're Ready!
+
+Your Aiducator instance is now ready.
+
+Next steps:
+
+1. Create a **Teacher** account.
+2. Generate an AI-powered course.
+3. Publish the course.
+4. Create a **Student** account.
+5. Enroll and experience the complete learning workflow.
